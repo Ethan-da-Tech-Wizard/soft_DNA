@@ -26,6 +26,22 @@ CodeLens Local is a small offline codebase explainer. The path stays intentional
 - Hardened non-Go symbol extraction (multi-line signatures, decorators/attributes, C/C++ statement filter)
 - Manifest detection fixes (Makefile no longer implies C without `.c` sources)
 
+## v1.3 Complete (Native Desktop App)
+
+- `codelens-gui`: a real, native desktop window (Fyne) — no browser, no
+  localhost, no server for the user to run or think about
+- Same pipeline as the CLI end to end (`internal/cli`'s exported
+  `RunPipeline`/`WriteMarkdownReport`/`Answer`); nothing reimplemented
+- Native tabbed report view (Summary, Tech Stack, Folders, Entry Points, a
+  filterable Functions & Classes table, Imports, AI Summaries as cards),
+  built directly from structured data rather than by parsing Markdown
+  or rendering it in a browser
+- Architecture diagram drawn on a native canvas (no Mermaid renderer, no
+  image export step)
+- Chat-style Ask tab over the grounded `--ask` pipeline
+- Settings dialog for the local LLM binary/model/threads, persisted as
+  JSON under the OS user config directory — never uploaded anywhere
+
 ## Next Polish
 
 - Improve report wording on larger real projects.
@@ -41,7 +57,8 @@ CodeLens Local is a small offline codebase explainer. The path stays intentional
 ## Not Planned
 
 - Cloud upload
-- GUI
+- Web/browser-based dashboard (a native desktop GUI shipped in v1.3 instead)
 - VS Code extension
-- Multi-turn model-based chat
+- Multi-turn conversational memory across Ask questions (each question is
+  answered independently, grounded fresh each time)
 - Any target-code execution
