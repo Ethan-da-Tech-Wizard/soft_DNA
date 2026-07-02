@@ -364,6 +364,7 @@ func TestBuildFromDBSrcEntryPoints(t *testing.T) {
 		('src/main.rs',  '.rs', 'Rust', 0),
 		('src/lib.rs',   '.rs', 'Rust', 0),
 		('src/main.go',  '.go', 'Go',   0),
+		('main.R',       '.r',  'R',    0),
 		('src/helper.go','.go', 'Go',   0)`)
 
 	ctx, err := buildFromDB(db)
@@ -375,7 +376,9 @@ func TestBuildFromDBSrcEntryPoints(t *testing.T) {
 	for _, ep := range ctx.EntryPoints {
 		epSet[ep] = struct{}{}
 	}
-	for _, want := range []string{"src/main.rs", "src/lib.rs", "src/main.go"} {
+	// main.R guards the case-sensitive SQLite match: R entry points are
+	// stored with their real uppercase extension.
+	for _, want := range []string{"src/main.rs", "src/lib.rs", "src/main.go", "main.R"} {
 		if _, ok := epSet[want]; !ok {
 			t.Errorf("EntryPoints missing %q; got %v", want, ctx.EntryPoints)
 		}
