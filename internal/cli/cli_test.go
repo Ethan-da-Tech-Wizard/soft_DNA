@@ -2,11 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"codelens-local/internal/grounding"
+	"codelens-local/internal/llm"
+	"codelens-local/internal/scanner"
 	"codelens-local/internal/stackdetect"
 )
 
@@ -719,5 +724,93 @@ fi
 		if !strings.Contains(report, want) {
 			t.Fatalf("report missing LLM output segment %q:\n%s", want, report)
 		}
+	}
+}
+
+func TestLLMLoopDiagnostics(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+
+	calls := 0
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		calls++
+		if calls == 1 {
+			// Turn 1: unparseable output so validation fails.
+			return []byte("not json at all"), nil
+		}
+		// Turn 2: valid output conforming to the file_explain schema.
+		return []byte(`{"file_summary": "A tiny module.", "symbol_explanations": []}`), nil
+	}
+
+	fileList := []string{"main.py"}
+	infoMap := map[string]scanner.FileInfo{
+		"main.py": {Path: "main.py", Language: "Python", LineCount: 3},
+	}
+	fileSymbols := map[string][]grounding.SymbolEntry{
+		"main.py": {{File: "main.py", Name: "hello", Kind: "function", StartLine: 1}},
+	}
+
+	var diagOut, warnOut bytes.Buffer
+	diag := llm.NewLoopState(len(fileList), &diagOut)
+	summaries := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+
+	wantLines := []string{
+		"[LLM Loop] Turn 1: Coverage = 0.00 | Throttle = 0.75 | Health = 0 | Stall = 1",
+		"[LLM Loop] Turn 2: Coverage = 0.00 | Throttle = 0.50 | Health = 1 | Stall = 0",
+	}
+	gotLines := strings.Split(strings.TrimSpace(diagOut.String()), "\n")
+	if len(gotLines) != len(wantLines) {
+		t.Fatalf("diagnostic lines = %d, want %d:\n%s", len(gotLines), len(wantLines), diagOut.String())
+	}
+	for i, want := range wantLines {
+		if gotLines[i] != want {
+			t.Errorf("line %d = %q, want %q", i+1, gotLines[i], want)
+		}
+	}
+
+	if calls != 2 {
+		t.Errorf("llmRun calls = %d, want 2 (one failed turn + one retry)", calls)
+	}
+	if fe, ok := summaries["main.py"]; !ok || fe.FileSummary != "A tiny module." {
+		t.Errorf("summaries[main.py] = %+v, want validated summary", summaries["main.py"])
+	}
+	if diag.P != 1 || diag.Stall != 0 || diag.Rho != llm.RhoNormal {
+		t.Errorf("final state P=%d Stall=%d Rho=%.2f, want P=1 Stall=0 Rho=%.2f", diag.P, diag.Stall, diag.Rho, llm.RhoNormal)
+	}
+}
+
+func TestLLMLoopAtomicBlockStall(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+
+	calls := 0
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		calls++
+		return nil, errors.New("model exploded")
+	}
+
+	fileList := []string{"main.py"}
+	infoMap := map[string]scanner.FileInfo{
+		"main.py": {Path: "main.py", Language: "Python", LineCount: 3},
+	}
+	fileSymbols := map[string][]grounding.SymbolEntry{}
+
+	var diagOut, warnOut bytes.Buffer
+	diag := llm.NewLoopState(len(fileList), &diagOut)
+	summaries := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+
+	// Fails at turns 1, 2, 3; stall exceeds the limit and forces a cutoff.
+	if calls != llm.StallLimit+1 {
+		t.Fatalf("llmRun calls = %d, want %d (retries bounded by stall guard)", calls, llm.StallLimit+1)
+	}
+	if !strings.Contains(warnOut.String(), "atomic block stall on main.py") {
+		t.Errorf("missing atomic block stall warning:\n%s", warnOut.String())
+	}
+	fe, ok := summaries["main.py"]
+	if !ok || !strings.Contains(fe.FileSummary, "forced cutoff") {
+		t.Errorf("summaries[main.py] = %+v, want forced cutoff summary", fe)
+	}
+	if diag.P != 1 || diag.Stall != 0 {
+		t.Errorf("ForceAdvance should move past the stalled segment: P=%d Stall=%d", diag.P, diag.Stall)
 	}
 }
