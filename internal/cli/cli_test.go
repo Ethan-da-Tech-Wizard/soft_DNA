@@ -54,8 +54,8 @@ func TestRunWritesReportForDirectory(t *testing.T) {
 	if !strings.Contains(report, "| main.py | Python | 1 |") {
 		t.Fatalf("report missing inventory row: %q", report)
 	}
-	if !strings.Contains(report, "Status: M5 local retrieval Q&A.") {
-		t.Fatalf("report missing M5 status: %q", report)
+	if !strings.Contains(report, "Status: deterministic offline analysis,") {
+		t.Fatalf("report missing status line: %q", report)
 	}
 }
 
@@ -111,7 +111,7 @@ func TestRunFullReportGoldenPrefix(t *testing.T) {
 
 Target: ../../testdata/sample_node
 
-Status: M5 local retrieval Q&A. Model-based chat is not implemented.
+Status: deterministic offline analysis, with optional local LLM summaries and grounded --ask.
 
 ## 1. Project Summary
 

@@ -2,7 +2,7 @@
 
 > **A free, offline codebase explainer.** Point it at a project folder; it detects the tech stack, indexes the source, and generates a plain-English architecture report — without your code ever leaving your machine.
 
-**Current release: v1.0.0** · Milestone 6 complete (hybrid LLM summaries, offline).
+**Current release: v1.2.0** · Diagnostics & integrity gate complete (BRSL loop, source-grounded summaries, grounded `--ask`, hardened symbol extraction).
 
 ---
 
@@ -14,7 +14,8 @@
 - **SQLite/FTS5 index** for fast local keyword search
 - **Mermaid architecture diagram** written to `architecture.mmd`
 - **`--ask` mode** — answer a question about the codebase using indexed citations, no model needed
-- **Hybrid LLM summaries** (optional, offline) — project overview + per-file annotations via a local llama.cpp model
+- **Grounded `--ask`** (optional, offline) — combine `--ask` with `--llm` for a plain-English answer generated from retrieved source snippets, always cited, falling back to citations-only if the model fails
+- **Hybrid LLM summaries** (optional, offline) — project overview + per-file annotations grounded in verified symbols and bounded source excerpts, with real-time loop diagnostics on stderr
 - **Cross-platform** — static CGO-free binary for macOS, Linux, and Windows
 
 ---
@@ -23,7 +24,7 @@
 
 ```sh
 # Install (one binary, no runtime deps)
-tar xzf codelens-v1.0.0-linux-amd64.tar.gz
+tar xzf codelens-v1.2.0-linux-amd64.tar.gz
 ./codelens ./my-project
 
 # Outputs:
@@ -37,6 +38,11 @@ tar xzf codelens-v1.0.0-linux-amd64.tar.gz
 ```sh
 codelens --ask "where does the request routing happen?" ./my-project
 # Writes: codelens-out/ANSWER.md  (FTS citations, no model call)
+
+# With a local model: grounded plain-English answer, printed to stdout
+# and written to ANSWER.md with sources (falls back to citations on failure)
+codelens --ask "where does the request routing happen?" \
+  --llm --llm-binary ./llama-cli --llm-model ./model.gguf ./my-project
 ```
 
 ---
@@ -153,19 +159,19 @@ testdata/sample_r/         testdata/sample_swift/    testdata/sample_sql/
 ## Release Build
 
 ```sh
-make release VERSION=v1.0.0
+make release VERSION=v1.2.0
 ```
 
 Produces archives in `dist/` for the full cross-platform matrix:
 
 | File | Platform |
 |---|---|
-| `codelens-v1.0.0-darwin-amd64.tar.gz` | macOS Intel |
-| `codelens-v1.0.0-darwin-arm64.tar.gz` | macOS Apple Silicon |
-| `codelens-v1.0.0-linux-amd64.tar.gz` | Linux x86-64 |
-| `codelens-v1.0.0-linux-arm64.tar.gz` | Linux ARM64 |
-| `codelens-v1.0.0-windows-amd64.zip` | Windows x86-64 |
-| `codelens-v1.0.0-windows-arm64.zip` | Windows ARM64 |
+| `codelens-v1.2.0-darwin-amd64.tar.gz` | macOS Intel |
+| `codelens-v1.2.0-darwin-arm64.tar.gz` | macOS Apple Silicon |
+| `codelens-v1.2.0-linux-amd64.tar.gz` | Linux x86-64 |
+| `codelens-v1.2.0-linux-arm64.tar.gz` | Linux ARM64 |
+| `codelens-v1.2.0-windows-amd64.zip` | Windows x86-64 |
+| `codelens-v1.2.0-windows-arm64.zip` | Windows ARM64 |
 | `checksums.txt` | SHA-256 for all archives |
 
 Verify on Linux/macOS:

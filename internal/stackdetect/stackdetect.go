@@ -108,12 +108,6 @@ func Detect(files []scanner.FileInfo, root string) Report {
 	if _, ok := paths["tsconfig.json"]; ok {
 		add("TypeScript", "language", "tsconfig.json")
 	}
-	if _, ok := paths["poetry.lock"]; ok {
-		add("Poetry", "tool", "poetry.lock")
-	}
-	if _, ok := paths["Pipfile"]; ok {
-		add("Pipenv", "tool", "Pipfile")
-	}
 	if _, ok := paths["CMakeLists.txt"]; ok {
 		add("C++", "language", "CMakeLists.txt")
 		add("CMake", "tool", "CMakeLists.txt")
