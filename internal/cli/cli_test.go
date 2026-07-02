@@ -752,7 +752,7 @@ func TestLLMLoopDiagnostics(t *testing.T) {
 
 	var diagOut, warnOut bytes.Buffer
 	diag := llm.NewLoopState(len(fileList), &diagOut)
-	summaries := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+	summaries, _ := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
 
 	wantLines := []string{
 		"[LLM Loop] Turn 1: Coverage = 0.00 | Throttle = 0.75 | Health = 0 | Stall = 1",
@@ -797,7 +797,7 @@ func TestLLMLoopAtomicBlockStall(t *testing.T) {
 
 	var diagOut, warnOut bytes.Buffer
 	diag := llm.NewLoopState(len(fileList), &diagOut)
-	summaries := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+	summaries, stalled := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
 
 	// Fails at turns 1, 2, 3; stall exceeds the limit and forces a cutoff.
 	if calls != llm.StallLimit+1 {
@@ -806,11 +806,49 @@ func TestLLMLoopAtomicBlockStall(t *testing.T) {
 	if !strings.Contains(warnOut.String(), "atomic block stall on main.py") {
 		t.Errorf("missing atomic block stall warning:\n%s", warnOut.String())
 	}
-	fe, ok := summaries["main.py"]
-	if !ok || !strings.Contains(fe.FileSummary, "forced cutoff") {
-		t.Errorf("summaries[main.py] = %+v, want forced cutoff summary", fe)
+	if len(stalled) != 1 || stalled[0] != "main.py" {
+		t.Errorf("stalled = %v, want [main.py]", stalled)
+	}
+	if _, ok := summaries["main.py"]; ok {
+		t.Errorf("summaries should not contain main.py since it has no valid summary")
 	}
 	if diag.P != 1 || diag.Stall != 0 {
 		t.Errorf("ForceAdvance should move past the stalled segment: P=%d Stall=%d", diag.P, diag.Stall)
 	}
 }
+
+func TestRunWritesStalledFilesToReport(t *testing.T) {
+	outDir := t.TempDir()
+	llmRes := LLMResult{
+		Enabled: true,
+		Stalled: []string{"b.py", "a.py"},
+	}
+
+	err := writeReport(
+		".",
+		outDir,
+		nil,
+		stackdetect.Report{},
+		nil,
+		nil,
+		nil,
+		indexStats{},
+		"",
+		llmRes,
+	)
+	if err != nil {
+		t.Fatalf("writeReport failed: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, reportName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := string(content)
+
+	want := "*Skipped after repeated validation failures: a.py, b.py*"
+	if !strings.Contains(report, want) {
+		t.Fatalf("report missing stalled warning %q:\n%s", want, report)
+	}
+}
+

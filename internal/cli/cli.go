@@ -304,6 +304,12 @@ Diagram: %s.
 				}
 			}
 		}
+		if len(llmRes.Stalled) > 0 {
+			stalledSorted := make([]string, len(llmRes.Stalled))
+			copy(stalledSorted, llmRes.Stalled)
+			sort.Strings(stalledSorted)
+			fmt.Fprintf(&b, "\n*Skipped after repeated validation failures: %s*\n", strings.Join(stalledSorted, ", "))
+		}
 	}
 
 	b.WriteString(`
@@ -658,6 +664,7 @@ type LLMResult struct {
 	Enabled         bool
 	ProjectOverview string
 	FileSummaries   map[string]validate.FileExplanation
+	Stalled         []string
 }
 
 // llmRun invokes the LLM subprocess; a package variable so tests can swap in
@@ -752,7 +759,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				MaxOutputBytes: 8192,
 			}
 			diag := llm.NewLoopState(len(fileList), os.Stderr)
-			res.FileSummaries = summarizeFiles(fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
+			res.FileSummaries, res.Stalled = summarizeFiles(fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: LLM file explain grammar write failed: %v\n", gErr)
 		}
@@ -775,8 +782,9 @@ func summarizeFiles(
 	cfg llm.Config,
 	diag *llm.LoopState,
 	warnOut io.Writer,
-) map[string]validate.FileExplanation {
+) (map[string]validate.FileExplanation, []string) {
 	summaries := make(map[string]validate.FileExplanation)
+	var stalled []string
 
 	for _, f := range fileList {
 		info, ok := infoMap[f]
@@ -835,15 +843,16 @@ func summarizeFiles(
 			}
 			if diag.Stalled() {
 				fmt.Fprintf(warnOut, "warning: atomic block stall on %s after %d failed turns; forcing cutoff summary\n", f, diag.Stall)
-				if fe.FileSummary == "" {
-					fe = validate.FileExplanation{FileSummary: "Summary unavailable: forced cutoff after repeated LLM validation failures."}
+				if fe.FileSummary != "" {
+					summaries[f] = fe
+				} else {
+					stalled = append(stalled, f)
 				}
-				summaries[f] = fe
 				diag.ForceAdvance()
 				break
 			}
 		}
 	}
 
-	return summaries
+	return summaries, stalled
 }
