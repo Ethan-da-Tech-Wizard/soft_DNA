@@ -759,7 +759,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				MaxOutputBytes: 8192,
 			}
 			diag := llm.NewLoopState(len(fileList), os.Stderr)
-			res.FileSummaries, res.Stalled = summarizeFiles(fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
+			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: LLM file explain grammar write failed: %v\n", gErr)
 		}
@@ -776,6 +776,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 // the segment is declared an atomic block stall: a cutoff summary is forced
 // and the loop moves on so a single bad file can never wedge the whole pass.
 func summarizeFiles(
+	root string,
 	fileList []string,
 	infoMap map[string]scanner.FileInfo,
 	fileSymbols map[string][]grounding.SymbolEntry,
@@ -802,11 +803,80 @@ func summarizeFiles(
 				syms = syms[:symCap]
 			}
 
+			// T3: Read file content and extract bounded excerpts starting at each symbol's StartLine
+			var excerpts []grounding.SymbolExcerpt
+			maxLinesPerSymbol := 12
+			maxLinesPerFile := 60
+			maxBytesPerFile := 2048
+			if diag.Rho < llm.RhoNormal {
+				maxLinesPerSymbol = 6
+				maxLinesPerFile = 30
+				maxBytesPerFile = 1024
+			}
+
+			rel, relOk := relInside(root, filepath.Join(root, filepath.FromSlash(f)))
+			if relOk {
+				targetPath := filepath.Join(root, filepath.FromSlash(rel))
+				data, readErr := os.ReadFile(targetPath)
+				if readErr == nil {
+					rawLines := strings.Split(string(data), "\n")
+					totalLinesAdded := 0
+					totalBytesAdded := 0
+
+					for _, s := range syms {
+						if totalLinesAdded >= maxLinesPerFile || totalBytesAdded >= maxBytesPerFile {
+							break
+						}
+
+						startIdx := s.StartLine - 1
+						if startIdx < 0 {
+							startIdx = 0
+						}
+						if startIdx >= len(rawLines) {
+							continue
+						}
+
+						var excerptLines []string
+						symbolLinesCount := 0
+						symbolBytesCount := 0
+
+						for i := startIdx; i < len(rawLines); i++ {
+							if symbolLinesCount >= maxLinesPerSymbol || (totalLinesAdded+symbolLinesCount) >= maxLinesPerFile {
+								break
+							}
+
+							line := rawLines[i]
+							// Injection defense: strip the literal delimiter ">>>"
+							line = strings.ReplaceAll(line, ">>>", "")
+							lineWithNL := line + "\n"
+
+							if (totalBytesAdded + symbolBytesCount + len(lineWithNL)) > maxBytesPerFile {
+								break
+							}
+
+							excerptLines = append(excerptLines, lineWithNL)
+							symbolLinesCount++
+							symbolBytesCount += len(lineWithNL)
+						}
+
+						if len(excerptLines) > 0 {
+							excerpts = append(excerpts, grounding.SymbolExcerpt{
+								Name:  s.Name,
+								Lines: excerptLines,
+							})
+							totalLinesAdded += symbolLinesCount
+							totalBytesAdded += symbolBytesCount
+						}
+					}
+				}
+			}
+
 			fc := grounding.FileContext{
 				File:      f,
 				Language:  info.Language,
 				LineCount: info.LineCount,
 				Symbols:   syms,
+				Excerpts:  excerpts,
 			}
 			prompt, pErr := grounding.FormatFileExplainPrompt(fc)
 			if pErr != nil {
