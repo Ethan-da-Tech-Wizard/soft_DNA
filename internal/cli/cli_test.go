@@ -928,3 +928,123 @@ func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 		}
 	}
 }
+
+func TestRunAskWithGroundedLLM(t *testing.T) {
+	tmpDir := t.TempDir()
+	mockModel := filepath.Join(tmpDir, "mock_model.gguf")
+	if err := os.WriteFile(mockModel, []byte("mock gguf model content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Mock llama-cli answering all three prompt kinds by schema marker.
+	mockBinary := filepath.Join(tmpDir, "mock_llama_cli")
+	script := `#!/bin/sh
+prompt=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -p|--prompt) prompt="$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+
+if echo "$prompt" | grep -q 'project_description'; then
+    echo '{"project_description": "Mock overview."}'
+elif echo "$prompt" | grep -q '"answer"'; then
+    echo '{"answer": "The hello function prints a greeting; it is the only symbol in main.py."}'
+else
+    echo '{"file_summary": "Mock file explanation.", "symbol_explanations": []}'
+fi
+`
+	if err := os.WriteFile(mockBinary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	root := filepath.Join("..", "..", "testdata", "sample_python")
+	outDir := filepath.Join(tmpDir, "out")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--out", outDir,
+		"--ask", "what does hello do?",
+		"--llm",
+		"--llm-binary", mockBinary,
+		"--llm-model", mockModel,
+		root,
+	}, &stdout, &stderr, "test")
+
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d; stderr=%q", code, exitOK, stderr.String())
+	}
+
+	// T6: the grounded answer is printed directly to stdout.
+	if !strings.Contains(stdout.String(), "The hello function prints a greeting") {
+		t.Fatalf("stdout missing grounded answer: %q", stdout.String())
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, answerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer := string(content)
+	for _, want := range []string{
+		"Mode: grounded local LLM answer over retrieved snippets.",
+		"The hello function prints a greeting",
+		"## Sources",
+		"- main.py",
+	} {
+		if !strings.Contains(answer, want) {
+			t.Fatalf("answer missing %q:\n%s", want, answer)
+		}
+	}
+	if strings.Contains(answer, "The most relevant indexed files are:") {
+		t.Fatalf("grounded answer should replace the FTS file list:\n%s", answer)
+	}
+}
+
+func TestRunAskLLMFallsBackToFTS(t *testing.T) {
+	tmpDir := t.TempDir()
+	mockModel := filepath.Join(tmpDir, "mock_model.gguf")
+	if err := os.WriteFile(mockModel, []byte("mock"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Binary that always fails: grounded answering must fall back to citations.
+	mockBinary := filepath.Join(tmpDir, "mock_llama_cli")
+	if err := os.WriteFile(mockBinary, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	root := filepath.Join("..", "..", "testdata", "sample_python")
+	outDir := filepath.Join(tmpDir, "out")
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{
+		"--out", outDir,
+		"--ask", "what does hello do?",
+		"--llm",
+		"--llm-binary", mockBinary,
+		"--llm-model", mockModel,
+		root,
+	}, &stdout, &stderr, "test")
+
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d; stderr=%q", code, exitOK, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "grounded LLM answer failed") {
+		t.Fatalf("missing fallback warning: %q", stderr.String())
+	}
+
+	content, err := os.ReadFile(filepath.Join(outDir, answerName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	answer := string(content)
+	for _, want := range []string{
+		"Mode: local FTS retrieval only.",
+		"The most relevant indexed files are:",
+		"- main.py",
+	} {
+		if !strings.Contains(answer, want) {
+			t.Fatalf("fallback answer missing %q:\n%s", want, answer)
+		}
+	}
+}
