@@ -1,0 +1,16 @@
+# GBNF grammar for the file explanation JSON response.
+# Enforces the exact output schema produced by grounding.FormatFileExplainPrompt.
+# Each rule is defined on a single line to comply with llama-cli GBNF parser syntax constraints.
+
+root ::= "{" ws "\"file_summary\"" ws ":" ws string ws "," ws "\"symbol_explanations\"" ws ":" ws sym-array ws "}"
+
+sym-array ::= "[" ws (sym-item ("," ws sym-item)*)? ws "]"
+
+sym-item ::= "{" ws "\"name\"" ws ":" ws string ws "," ws "\"explanation\"" ws ":" ws string ws "}"
+
+# Strings: standard JSON with explicit ban on bare newlines/carriage-returns.
+string   ::= "\"" str-char* "\""
+str-char ::= [^"\\\x0A\x0D] | "\\" str-esc
+str-esc  ::= ["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F]
+
+ws ::= [ \t\n\r]*

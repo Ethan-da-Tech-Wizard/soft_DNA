@@ -1,0 +1,5 @@
+Package: sampleR
+Title: Sample R Package
+Version: 0.1.0
+Depends: R (>= 4.0.0)
+Imports: ggplot2, dplyr
