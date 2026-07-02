@@ -414,3 +414,34 @@ func filterField(errs []ValidationError, target string) []ValidationError {
 	}
 	return out
 }
+
+func TestValidateAskAnswer(t *testing.T) {
+	raw := []byte(`{"answer": "The CLI starts in the Run function. See https://example.com for docs."}trailing noise`)
+	aa, err := ValidateAskAnswer(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(aa.Answer, "The CLI starts in the Run function.") {
+		t.Fatalf("answer lost prose: %q", aa.Answer)
+	}
+	if strings.Contains(aa.Answer, "https://") {
+		t.Fatalf("URL survived sanitization: %q", aa.Answer)
+	}
+}
+
+func TestValidateAskAnswerRejectsInvalidJSON(t *testing.T) {
+	if _, err := ValidateAskAnswer([]byte("not json")); err == nil {
+		t.Fatal("expected parse error for invalid JSON")
+	}
+}
+
+func TestValidateAskAnswerTruncatesLongAnswers(t *testing.T) {
+	long := strings.Repeat("a", 2000)
+	aa, err := ValidateAskAnswer([]byte(`{"answer": "` + long + `"}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len([]rune(aa.Answer)) > 1501 {
+		t.Fatalf("answer not truncated: %d runes", len([]rune(aa.Answer)))
+	}
+}
