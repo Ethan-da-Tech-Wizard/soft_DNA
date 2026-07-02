@@ -752,7 +752,7 @@ func TestLLMLoopDiagnostics(t *testing.T) {
 
 	var diagOut, warnOut bytes.Buffer
 	diag := llm.NewLoopState(len(fileList), &diagOut)
-	summaries, _ := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+	summaries, _ := summarizeFiles(".", fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
 
 	wantLines := []string{
 		"[LLM Loop] Turn 1: Coverage = 0.00 | Throttle = 0.75 | Health = 0 | Stall = 1",
@@ -797,7 +797,7 @@ func TestLLMLoopAtomicBlockStall(t *testing.T) {
 
 	var diagOut, warnOut bytes.Buffer
 	diag := llm.NewLoopState(len(fileList), &diagOut)
-	summaries, stalled := summarizeFiles(fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
+	summaries, stalled := summarizeFiles(".", fileList, infoMap, fileSymbols, llm.Config{}, diag, &warnOut)
 
 	// Fails at turns 1, 2, 3; stall exceeds the limit and forces a cutoff.
 	if calls != llm.StallLimit+1 {
