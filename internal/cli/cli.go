@@ -36,7 +36,7 @@ const reportName = "CODEBASE_REPORT.md"
 const answerName = "ANSWER.md"
 const dbName = "codelens.db"
 
-type indexStats struct {
+type IndexStats struct {
 	Path       string
 	Files      int
 	SearchRows int
@@ -90,81 +90,252 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	}
 
 	root := fs.Arg(0)
-	if err := validateRoot(root); err != nil {
-		fmt.Fprintf(stderr, "invalid path: %v\n", err)
-		return exitBadPath
-	}
-
-	scanIgnores := outputAwareIgnores(root, *outDir, ignores)
-	files, err := scanner.Scan(root, scanner.Options{
+	res, err := RunPipeline(PipelineOptions{
+		Root:        root,
+		OutDir:      *outDir,
 		MaxFileSize: *maxFileSize,
-		Ignore:      scanIgnores,
-	})
+		Ignore:      ignores,
+		LLMEnabled:  *llmEnabled,
+		LLMBinary:   *llmBinary,
+		LLMModel:    *llmModel,
+		LLMThreads:  *llmThreads,
+		LLMTimeout:  *llmTimeout,
+		LLMMaxFiles: *llmMaxFiles,
+	}, stderr)
 	if err != nil {
-		fmt.Fprintf(stderr, "scan failed: %v\n", err)
-		return exitInternal
-	}
-
-	stack := stackdetect.Detect(files, root)
-	folders, entries := structure.Analyze(files)
-	symbolList := symbols.ExtractAll(root, files)
-
-	stats, err := buildIndex(root, *outDir, files, symbolList)
-	if err != nil {
-		fmt.Fprintf(stderr, "index failed: %v\n", err)
-		return exitInternal
-	}
-
-	diagramPath, err := diagram.WriteMermaid(*outDir, stack, folders, entries)
-	if err != nil {
-		fmt.Fprintf(stderr, "diagram failed: %v\n", err)
-		return exitInternal
-	}
-
-	var llmRes LLMResult
-	if *llmEnabled {
-		if *llmBinary == "" || *llmModel == "" {
-			fmt.Fprintln(stderr, "warning: --llm is enabled but --llm-binary or --llm-model is missing; skipping LLM pass")
-		} else {
-			dbPath := filepath.Join(*outDir, dbName)
-			var err error
-			llmRes, err = runLLMPipeline(root, dbPath, *llmBinary, *llmModel, *llmThreads, *llmMaxFiles, *llmTimeout, files)
-			if err != nil {
-				fmt.Fprintf(stderr, "warning: LLM pass failed: %v; continuing with deterministic report\n", err)
-			}
+		fmt.Fprintf(stderr, "%v\n", err)
+		if IsInvalidRoot(err) {
+			return exitBadPath
 		}
+		return exitInternal
+	}
+	for _, w := range res.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", w)
 	}
 
-	if err := writeReport(root, *outDir, files, stack, folders, entries, symbolList, stats, diagramPath, llmRes); err != nil {
+	if err := WriteMarkdownReport(res); err != nil {
 		fmt.Fprintf(stderr, "failed to write report: %v\n", err)
 		return exitInternal
 	}
 
 	if strings.TrimSpace(*question) != "" {
-		hits, err := answerHits(*outDir, *question, entries)
+		ans, err := Answer(AnswerOptions{
+			Root:       root,
+			OutDir:     *outDir,
+			Question:   *question,
+			Entries:    res.Entries,
+			LLMEnabled: *llmEnabled,
+			LLMBinary:  *llmBinary,
+			LLMModel:   *llmModel,
+			LLMThreads: *llmThreads,
+			LLMTimeout: *llmTimeout,
+		})
 		if err != nil {
 			fmt.Fprintf(stderr, "failed to write answer: %v\n", err)
 			return exitInternal
 		}
-		llmAnswer := ""
-		if *llmEnabled && *llmBinary != "" && *llmModel != "" {
-			answer, aErr := answerWithLLM(root, *question, hits, *llmBinary, *llmModel, *llmThreads, *llmTimeout)
-			if aErr != nil {
-				fmt.Fprintf(stderr, "warning: grounded LLM answer failed: %v; falling back to FTS citations\n", aErr)
-			} else {
-				llmAnswer = answer
-				fmt.Fprintln(stdout, answer)
-			}
+		if ans.LLMWarning != "" {
+			fmt.Fprintf(stderr, "warning: %s\n", ans.LLMWarning)
 		}
-		if err := writeAnswer(*outDir, *question, hits, llmAnswer); err != nil {
-			fmt.Fprintf(stderr, "failed to write answer: %v\n", err)
-			return exitInternal
+		if ans.LLMAnswer != "" {
+			fmt.Fprintln(stdout, ans.LLMAnswer)
 		}
 		fmt.Fprintf(stdout, "wrote %s\n", filepath.Join(*outDir, answerName))
 	}
 
 	fmt.Fprintf(stdout, "wrote %s\n", filepath.Join(*outDir, reportName))
 	return exitOK
+}
+
+// PipelineOptions configures one full scan+index+diagram(+optional LLM) pass.
+// It is the single input to RunPipeline, which both the CLI and any other
+// front end (such as the desktop GUI) call so pipeline behavior can never
+// diverge between them.
+type PipelineOptions struct {
+	Root        string
+	OutDir      string
+	MaxFileSize int64
+	Ignore      []string
+
+	LLMEnabled  bool
+	LLMBinary   string
+	LLMModel    string
+	LLMThreads  int
+	LLMTimeout  time.Duration
+	LLMMaxFiles int
+}
+
+// PipelineResult bundles every artifact RunPipeline produces: the raw
+// inventory and analysis data needed to render a report natively (as the GUI
+// does) plus everything WriteMarkdownReport needs to render it as Markdown
+// (as the CLI does). Warnings holds non-fatal messages (e.g. a skipped LLM
+// pass) that a caller should surface to the user without treating as failure.
+type PipelineResult struct {
+	Root        string
+	OutDir      string
+	Files       []scanner.FileInfo
+	Stack       stackdetect.Report
+	Folders     []structure.Folder
+	Entries     []structure.EntryPoint
+	Symbols     []symbols.Symbol
+	Index       IndexStats
+	DiagramPath string
+	LLM         LLMResult
+	Warnings    []string
+}
+
+// errInvalidRoot is wrapped into RunPipeline's error when opts.Root fails
+// validation, so callers (CLI exit code, GUI error dialog) can distinguish a
+// bad path from a deeper pipeline failure via errors.Is.
+var errInvalidRoot = errors.New("invalid path")
+
+// IsInvalidRoot reports whether err from RunPipeline indicates opts.Root
+// failed validation (missing path or not a directory), as opposed to a
+// deeper scan/index/diagram/LLM failure. A GUI front end can use this to
+// show a "choose a valid folder" prompt instead of a generic error dialog.
+func IsInvalidRoot(err error) bool {
+	return errors.Is(err, errInvalidRoot)
+}
+
+// RunPipeline scans root, builds the SQLite index and Mermaid diagram, and —
+// if opts.LLMEnabled with a binary and model configured — runs the hybrid
+// LLM summarization pass. diagOut receives LLM loop diagnostics and non-fatal
+// warnings as they happen; pass io.Discard to suppress them.
+func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error) {
+	if diagOut == nil {
+		diagOut = io.Discard
+	}
+	if err := validateRoot(opts.Root); err != nil {
+		return PipelineResult{}, fmt.Errorf("%w: %v", errInvalidRoot, err)
+	}
+
+	outDir := opts.OutDir
+	if outDir == "" {
+		outDir = "./codelens-out"
+	}
+	maxFileSize := opts.MaxFileSize
+	if maxFileSize <= 0 {
+		maxFileSize = 2 * 1024 * 1024
+	}
+
+	scanIgnores := outputAwareIgnores(opts.Root, outDir, opts.Ignore)
+	files, err := scanner.Scan(opts.Root, scanner.Options{
+		MaxFileSize: maxFileSize,
+		Ignore:      scanIgnores,
+	})
+	if err != nil {
+		return PipelineResult{}, fmt.Errorf("scan failed: %w", err)
+	}
+
+	stack := stackdetect.Detect(files, opts.Root)
+	folders, entries := structure.Analyze(files)
+	symbolList := symbols.ExtractAll(opts.Root, files)
+
+	stats, err := buildIndex(opts.Root, outDir, files, symbolList)
+	if err != nil {
+		return PipelineResult{}, fmt.Errorf("index failed: %w", err)
+	}
+
+	diagramPath, err := diagram.WriteMermaid(outDir, stack, folders, entries)
+	if err != nil {
+		return PipelineResult{}, fmt.Errorf("diagram failed: %w", err)
+	}
+
+	res := PipelineResult{
+		Root: opts.Root, OutDir: outDir,
+		Files: files, Stack: stack, Folders: folders, Entries: entries,
+		Symbols: symbolList, Index: stats, DiagramPath: diagramPath,
+	}
+
+	if opts.LLMEnabled {
+		if opts.LLMBinary == "" || opts.LLMModel == "" {
+			res.Warnings = append(res.Warnings, "--llm is enabled but the LLM binary or model path is missing; skipping LLM pass")
+		} else {
+			threads := opts.LLMThreads
+			if threads <= 0 {
+				threads = runtime.NumCPU()
+			}
+			timeout := opts.LLMTimeout
+			if timeout <= 0 {
+				timeout = 60 * time.Second
+			}
+			dbPath := filepath.Join(outDir, dbName)
+			llmRes, llmErr := runLLMPipeline(opts.Root, dbPath, opts.LLMBinary, opts.LLMModel, threads, opts.LLMMaxFiles, timeout, files, diagOut)
+			if llmErr != nil {
+				res.Warnings = append(res.Warnings, fmt.Sprintf("LLM pass failed: %v; continuing with deterministic report", llmErr))
+			} else {
+				res.LLM = llmRes
+			}
+		}
+	}
+
+	return res, nil
+}
+
+// WriteMarkdownReport renders res as CODEBASE_REPORT.md in res.OutDir — the
+// same document the CLI has always produced. A GUI front end can call this
+// to keep the on-disk report in sync with what it also renders natively.
+func WriteMarkdownReport(res PipelineResult) error {
+	return writeReport(res.Root, res.OutDir, res.Files, res.Stack, res.Folders, res.Entries, res.Symbols, res.Index, res.DiagramPath, res.LLM)
+}
+
+// AnswerOptions configures one --ask style question against an already
+// indexed project (res.OutDir from a prior RunPipeline call must contain
+// codelens.db).
+type AnswerOptions struct {
+	Root     string
+	OutDir   string
+	Question string
+	Entries  []structure.EntryPoint
+
+	LLMEnabled bool
+	LLMBinary  string
+	LLMModel   string
+	LLMThreads int
+	LLMTimeout time.Duration
+}
+
+// AnswerResult holds the outcome of Answer: the FTS citations, and — when an
+// LLM was configured and grounding succeeded — the grounded prose answer.
+type AnswerResult struct {
+	Question   string
+	Hits       []searchindex.Hit
+	LLMAnswer  string
+	LLMWarning string
+}
+
+// Answer retrieves citations for question from the index at opts.OutDir,
+// optionally grounds an LLM answer over them, writes ANSWER.md (matching the
+// CLI's --ask output), and returns the same data so a GUI can also render it
+// inline (e.g. as a chat bubble) without re-parsing the file.
+func Answer(opts AnswerOptions) (AnswerResult, error) {
+	hits, err := answerHits(opts.OutDir, opts.Question, opts.Entries)
+	if err != nil {
+		return AnswerResult{}, err
+	}
+
+	res := AnswerResult{Question: opts.Question, Hits: hits}
+	if opts.LLMEnabled && opts.LLMBinary != "" && opts.LLMModel != "" {
+		threads := opts.LLMThreads
+		if threads <= 0 {
+			threads = runtime.NumCPU()
+		}
+		timeout := opts.LLMTimeout
+		if timeout <= 0 {
+			timeout = 60 * time.Second
+		}
+		answer, aErr := answerWithLLM(opts.Root, opts.Question, hits, opts.LLMBinary, opts.LLMModel, threads, timeout)
+		if aErr != nil {
+			res.LLMWarning = fmt.Sprintf("grounded LLM answer failed: %v; falling back to FTS citations", aErr)
+		} else {
+			res.LLMAnswer = answer
+		}
+	}
+
+	if err := writeAnswer(opts.OutDir, opts.Question, hits, res.LLMAnswer); err != nil {
+		return AnswerResult{}, err
+	}
+	return res, nil
 }
 
 func validateRoot(path string) error {
@@ -189,7 +360,7 @@ func writeReport(
 	folders []structure.Folder,
 	entries []structure.EntryPoint,
 	symbolList []symbols.Symbol,
-	stats indexStats,
+	stats IndexStats,
 	diagramPath string,
 	llmRes LLMResult,
 ) error {
@@ -351,34 +522,34 @@ Diagram: %s.
 	return os.WriteFile(filepath.Join(outDir, reportName), []byte(b.String()), 0o644)
 }
 
-func buildIndex(root, outDir string, files []scanner.FileInfo, symbolList []symbols.Symbol) (indexStats, error) {
+func buildIndex(root, outDir string, files []scanner.FileInfo, symbolList []symbols.Symbol) (IndexStats, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
 
 	dbPath := filepath.Join(outDir, dbName)
 	store, err := searchindex.Open(dbPath)
 	if err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
 	defer store.Close()
 
 	if err := store.Init(); err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
 	if err := store.RebuildWithSymbols(root, files, symbolList); err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
 
 	fileRows, searchRows, err := store.Stats()
 	if err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
 	symbolRows, err := store.SymbolCount()
 	if err != nil {
-		return indexStats{}, err
+		return IndexStats{}, err
 	}
-	return indexStats{Path: dbPath, Files: fileRows, Symbols: symbolRows, SearchRows: searchRows}, nil
+	return IndexStats{Path: dbPath, Files: fileRows, Symbols: symbolRows, SearchRows: searchRows}, nil
 }
 
 // answerHits retrieves the top indexed matches for an --ask question,
@@ -787,8 +958,11 @@ var llmRun = llm.Run
 // the cap is halved — the "retry with a 50% chunk" rule.
 const maxLLMSymbols = 5
 
-// runLLMPipeline orchestrates facts grounding, LLM subprocess execution, and post-validation.
-func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, files []scanner.FileInfo) (LLMResult, error) {
+// runLLMPipeline orchestrates facts grounding, LLM subprocess execution, and
+// post-validation. diagOut receives the [LLM Loop] diagnostic lines and any
+// warnings from this pass — the CLI passes its stderr, the GUI passes a
+// callback-backed writer that streams into a log widget.
+func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, files []scanner.FileInfo, diagOut io.Writer) (LLMResult, error) {
 	gCtx, err := grounding.Build(dbPath)
 	if err != nil {
 		return LLMResult{}, fmt.Errorf("grounding build: %w", err)
@@ -820,7 +994,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 		fileList = fileList[:maxFiles]
 	}
 
-	diag := llm.NewLoopState(1+len(fileList), os.Stderr)
+	diag := llm.NewLoopState(1+len(fileList), diagOut)
 
 	// 1. Project Overview Summarization (Segment 0)
 	projPrompt, err := grounding.FormatProjectOverviewPrompt(gCtx)
@@ -845,12 +1019,12 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				var pe validate.ProjectExplanation
 				valid := false
 				if runErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: LLM project overview run failed: %v\n", runErr)
+					fmt.Fprintf(diagOut, "warning: LLM project overview run failed: %v\n", runErr)
 				} else {
 					var valErr error
 					pe, valErr = validate.ValidateProjectExplanation(out)
 					if valErr != nil {
-						fmt.Fprintf(os.Stderr, "warning: LLM project overview validation failed: %v (raw: %q)\n", valErr, string(out))
+						fmt.Fprintf(diagOut, "warning: LLM project overview validation failed: %v (raw: %q)\n", valErr, string(out))
 					} else {
 						valid = true
 					}
@@ -862,19 +1036,19 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 					break
 				}
 				if diag.Stalled() {
-					fmt.Fprintf(os.Stderr, "warning: LLM project overview stalled after %d failed turns; skipping\n", diag.Stall)
+					fmt.Fprintf(diagOut, "warning: LLM project overview stalled after %d failed turns; skipping\n", diag.Stall)
 					diag.ForceAdvance()
 					break
 				}
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "warning: LLM project overview grammar write failed: %v\n", gErr)
+			fmt.Fprintf(diagOut, "warning: LLM project overview grammar write failed: %v\n", gErr)
 			diag.BeginTurn()
 			diag.EndTurn(false)
 			diag.ForceAdvance()
 		}
 	} else {
-		fmt.Fprintf(os.Stderr, "warning: LLM project overview prompt format failed: %v\n", err)
+		fmt.Fprintf(diagOut, "warning: LLM project overview prompt format failed: %v\n", err)
 		diag.BeginTurn()
 		diag.EndTurn(false)
 		diag.ForceAdvance()
@@ -895,9 +1069,9 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				Timeout:        timeout,
 				MaxOutputBytes: 8192,
 			}
-			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
+			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, diagOut)
 		} else {
-			fmt.Fprintf(os.Stderr, "warning: LLM file explain grammar write failed: %v\n", gErr)
+			fmt.Fprintf(diagOut, "warning: LLM file explain grammar write failed: %v\n", gErr)
 		}
 	}
 
