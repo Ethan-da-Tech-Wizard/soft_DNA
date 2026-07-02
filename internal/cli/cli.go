@@ -660,6 +660,15 @@ type LLMResult struct {
 	FileSummaries   map[string]validate.FileExplanation
 }
 
+// llmRun invokes the LLM subprocess; a package variable so tests can swap in
+// a mock runner without spawning a real llama.cpp process.
+var llmRun = llm.Run
+
+// maxLLMSymbols caps how many verified symbols are included in a file-explain
+// prompt at normal throttle. At repair throttle (after a validation failure)
+// the cap is halved — the "retry with a 50% chunk" rule.
+const maxLLMSymbols = 5
+
 // runLLMPipeline orchestrates facts grounding, LLM subprocess execution, and post-validation.
 func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, files []scanner.FileInfo) (LLMResult, error) {
 	gCtx, err := grounding.Build(dbPath)
@@ -732,64 +741,109 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 		fileGrammar, fileCleanup, gErr := llm.WriteGrammar("file_explain.gbnf")
 		if gErr == nil {
 			defer fileCleanup()
-			for _, f := range fileList {
-				info, ok := infoMap[f]
-				if !ok {
-					continue
-				}
-				syms := fileSymbols[f]
-				if len(syms) > 5 {
-					syms = syms[:5]
-				}
-
-				fc := grounding.FileContext{
-					File:      f,
-					Language:  info.Language,
-					LineCount: info.LineCount,
-					Symbols:   syms,
-				}
-
-				prompt, pErr := grounding.FormatFileExplainPrompt(fc)
-				if pErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: LLM file explain prompt format failed for %s: %v\n", f, pErr)
-					continue
-				}
-
-				cfg := llm.Config{
-					BinaryPath:     binaryPath,
-					ModelPath:      modelPath,
-					GrammarPath:    fileGrammar,
-					Threads:        threads,
-					MaxTokens:      512,
-					Temperature:    0.1,
-					Timeout:        timeout,
-					MaxOutputBytes: 8192,
-				}
-
-				out, runErr := llm.Run(context.Background(), cfg, prompt)
-				if runErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: LLM file explain run failed for %s: %v\n", f, runErr)
-					continue
-				}
-
-				// Build list of expected/allowed symbol names in this file for validation
-				var allowedNames []string
-				for _, s := range syms {
-					allowedNames = append(allowedNames, s.Name)
-				}
-
-				fe, errs := validate.ValidateFileExplanation(out, allowedNames)
-				if len(errs) > 0 {
-					fmt.Fprintf(os.Stderr, "warning: LLM file explain validation warnings for %s: %v (raw: %q)\n", f, errs, string(out))
-				}
-				if len(errs) == 0 || fe.FileSummary != "" {
-					res.FileSummaries[f] = fe
-				}
+			cfg := llm.Config{
+				BinaryPath:     binaryPath,
+				ModelPath:      modelPath,
+				GrammarPath:    fileGrammar,
+				Threads:        threads,
+				MaxTokens:      512,
+				Temperature:    0.1,
+				Timeout:        timeout,
+				MaxOutputBytes: 8192,
 			}
+			diag := llm.NewLoopState(len(fileList), os.Stderr)
+			res.FileSummaries = summarizeFiles(fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: LLM file explain grammar write failed: %v\n", gErr)
 		}
 	}
 
 	return res, nil
+}
+
+// summarizeFiles runs the boundary-safe summarization loop (BRSL) over
+// fileList: each file is one segment; a segment only counts as covered once
+// its LLM output passes validation. Failed turns freeze the pointer, drop the
+// throttle to llm.RhoRepair (which halves the symbol chunk fed to the prompt),
+// and retry the same file. After more than llm.StallLimit consecutive failures
+// the segment is declared an atomic block stall: a cutoff summary is forced
+// and the loop moves on so a single bad file can never wedge the whole pass.
+func summarizeFiles(
+	fileList []string,
+	infoMap map[string]scanner.FileInfo,
+	fileSymbols map[string][]grounding.SymbolEntry,
+	cfg llm.Config,
+	diag *llm.LoopState,
+	warnOut io.Writer,
+) map[string]validate.FileExplanation {
+	summaries := make(map[string]validate.FileExplanation)
+
+	for _, f := range fileList {
+		info, ok := infoMap[f]
+		if !ok {
+			continue
+		}
+
+		for {
+			symCap := maxLLMSymbols
+			if diag.Rho < llm.RhoNormal {
+				symCap = maxLLMSymbols / 2
+			}
+			syms := fileSymbols[f]
+			if len(syms) > symCap {
+				syms = syms[:symCap]
+			}
+
+			fc := grounding.FileContext{
+				File:      f,
+				Language:  info.Language,
+				LineCount: info.LineCount,
+				Symbols:   syms,
+			}
+			prompt, pErr := grounding.FormatFileExplainPrompt(fc)
+			if pErr != nil {
+				// Deterministic failure — retrying cannot help; skip the file.
+				fmt.Fprintf(warnOut, "warning: LLM file explain prompt format failed for %s: %v\n", f, pErr)
+				break
+			}
+
+			diag.BeginTurn()
+			raw, runErr := llmRun(context.Background(), cfg, prompt)
+
+			var fe validate.FileExplanation
+			valid := false
+			if runErr != nil {
+				fmt.Fprintf(warnOut, "warning: LLM file explain run failed for %s: %v\n", f, runErr)
+			} else {
+				// Build list of expected/allowed symbol names in this file for validation
+				var allowedNames []string
+				for _, s := range syms {
+					allowedNames = append(allowedNames, s.Name)
+				}
+				var errs []validate.ValidationError
+				fe, errs = validate.ValidateFileExplanation(raw, allowedNames)
+				if len(errs) > 0 {
+					fmt.Fprintf(warnOut, "warning: LLM file explain validation warnings for %s: %v (raw: %q)\n", f, errs, string(raw))
+				}
+				valid = len(errs) == 0 || fe.FileSummary != ""
+			}
+			diag.EndTurn(valid)
+
+			if valid {
+				summaries[f] = fe
+				break
+			}
+			if diag.Stalled() {
+				fmt.Fprintf(warnOut, "warning: atomic block stall on %s after %d failed turns; forcing cutoff summary\n", f, diag.Stall)
+				if fe.FileSummary == "" {
+					fe = validate.FileExplanation{FileSummary: "Summary unavailable: forced cutoff after repeated LLM validation failures."}
+				}
+				summaries[f] = fe
+				diag.ForceAdvance()
+				break
+			}
+		}
+	}
+
+	return summaries
 }
