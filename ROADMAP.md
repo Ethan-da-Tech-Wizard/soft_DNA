@@ -1,8 +1,8 @@
 # Roadmap
 
-CodeLens Local is a small offline codebase explainer. The current v1 path is intentionally simple: scan, detect, index, report, diagram, and local retrieval Q&A.
+CodeLens Local is a small offline codebase explainer. The path stays intentionally simple: scan, detect, index, report, diagram, local retrieval Q&A, and optional local-LLM summarization.
 
-## v1 Complete
+## v1.0 Complete
 
 - CLI workflow
 - Scanner and inventory
@@ -12,27 +12,36 @@ CodeLens Local is a small offline codebase explainer. The current v1 path is int
 - Lightweight symbol extraction
 - Mermaid architecture diagram
 - Local retrieval answer with file citations
-- Cross-platform release builds
+- Cross-platform release builds with checksums
 - C++ and CMake project support
+- Optional local model summarization, offline only (hybrid LLM pass)
+
+## v1.2 Complete (Diagnostics & Integrity Gate)
+
+- Real-time BRSL loop diagnostics (`[LLM Loop]` coverage/throttle/health/stall lines; see `KISS_LOOP_EQUATION.md`)
+- Validation-failure retries at half chunk, with an atomic-block stall guard
+- Bounded source excerpts grounding the per-file LLM prompts
+- Project overview covered by the diagnostics loop; `--llm-max-files 0` = uncapped
+- Grounded `--ask`: FTS retrieval + one local LLM call = cited plain-English answer, with FTS-only fallback
+- Hardened non-Go symbol extraction (multi-line signatures, decorators/attributes, C/C++ statement filter)
+- Manifest detection fixes (Makefile no longer implies C without `.c` sources)
 
 ## Next Polish
 
 - Improve report wording on larger real projects.
 - Improve setup guesses for common Go, Node, and Python layouts.
-- Add checksums for release binaries.
 - Keep CI green on every push.
 
 ## Later, Only If Needed
 
 - Deeper parsing with `github.com/odvcencio/gotreesitter`.
 - Better ranking for `--ask` results.
-- Optional local model summarization, offline only.
-- Future language extensions (C, Rust, Ruby, R, Swift, SQL) — see [Language Support Roadmap](files/08_LANGUAGE_SUPPORT_ROADMAP.md).
+- Future language extensions — see [Language Support Roadmap](files/08_LANGUAGE_SUPPORT_ROADMAP.md).
 
-## Not Planned For v1
+## Not Planned
 
 - Cloud upload
 - GUI
 - VS Code extension
-- Model-based chat by default
+- Multi-turn model-based chat
 - Any target-code execution
