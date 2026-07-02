@@ -353,3 +353,33 @@ func TestDetectCPPStack(t *testing.T) {
 		t.Fatalf("CMake tech = %#v, want tool from CMakeLists.txt", got)
 	}
 }
+
+func TestDetectMakefileWithoutCSources(t *testing.T) {
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, "go.mod"), "module myapp\n")
+	mustWriteFile(t, filepath.Join(root, "Makefile"), "build:\n\tgo build\n")
+
+	files, err := scanner.Scan(root, scanner.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report := Detect(files, root)
+
+	byName := make(map[string]Tech, len(report.Tech))
+	for _, tech := range report.Tech {
+		byName[tech.Name] = tech
+	}
+
+	if _, hasC := byName["C"]; hasC {
+		t.Fatalf("falsely detected C language from Makefile without C sources")
+	}
+
+	if got := byName["Go"]; got.Category != "language" || got.EvidenceFile != "go.mod" {
+		t.Fatalf("Go tech = %#v, want language from go.mod", got)
+	}
+
+	if got := byName["Make"]; got.Category != "tool" || got.EvidenceFile != "Makefile" {
+		t.Fatalf("Make tech = %#v, want tool from Makefile", got)
+	}
+}

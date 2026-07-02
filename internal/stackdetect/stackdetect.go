@@ -37,15 +37,27 @@ func Detect(files []scanner.FileInfo, root string) Report {
 		seen[key] = Tech{Name: name, Category: category, EvidenceFile: evidence}
 	}
 
+	hasC := false
+	for _, file := range files {
+		if file.Language == "C" {
+			hasC = true
+			break
+		}
+	}
+
 	if _, ok := paths["go.mod"]; ok {
 		add("Go", "language", "go.mod")
 	}
 	if _, ok := paths["Makefile"]; ok {
-		add("C", "language", "Makefile")
+		if hasC {
+			add("C", "language", "Makefile")
+		}
 		add("Make", "tool", "Makefile")
 	}
 	if _, ok := paths["configure.ac"]; ok {
-		add("C", "language", "configure.ac")
+		if hasC {
+			add("C", "language", "configure.ac")
+		}
 		add("Make", "tool", "configure.ac")
 	}
 	if _, ok := paths["requirements.txt"]; ok {
