@@ -12,27 +12,35 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (commit noted)
 
 ## Desktop GUI (`codelens-gui`)
 
-- [ ] **Log panel doesn't auto-scroll** — new `[LLM Loop]` lines append but
-      the visible scroll position doesn't follow them during a long scan.
-      _(`appendLog` sets `CursorRow` but that doesn't move the containing
-      `Scroll`'s viewport.)_
-- [ ] **Enter key in the path field does nothing** — you have to reach for
-      the mouse to click Scan even after typing/pasting a path.
-- [ ] **Ask tab can double-submit** — pressing Enter rapidly (or Enter then
-      clicking Send before the first answer returns) fires two concurrent
-      questions; the Send button disables but `OnSubmitted` doesn't check
-      that guard.
-- [ ] **Last project path isn't remembered** — closing and reopening the
-      app always starts from an empty path field, even though Settings
-      already persists other preferences the same way.
-- [ ] **No indeterminate progress indicator while scanning** — the only
-      feedback during a scan is the static "Scanning…" label and whatever
-      text happens to land in the log; nothing communicates "still working"
-      once a long LLM pass goes quiet between files.
-- [ ] **Settings dialog silently accepts a broken LLM config** — enabling
-      the LLM checkbox with an empty or nonexistent binary/model path saves
-      without warning; the user only finds out on the next scan via a log
-      warning that easily scrolls past unnoticed.
+- [x] **Log panel doesn't auto-scroll** — `widget.Entry` manages its own
+      internal scroll privately; no public API lets outside code drive it.
+      Fixed by switching the log to a plain `widget.Label` inside a
+      `container.Scroll` this code owns, calling `ScrollToBottom()` after
+      every append. Verified: scan produced multiple `[LLM Loop]` lines,
+      all visible without manual scrolling.
+- [x] **Enter key in the path field does nothing** — added
+      `pathEntry.OnSubmitted` calling `startScan()`. Verified: typed a path
+      and hit Enter with the mouse never touching the Scan button; scan ran
+      and results rendered.
+- [x] **Ask tab can double-submit** — `ask()` now returns early if
+      `send.Disabled()`, checked from both the button tap and
+      `question.OnSubmitted`, so a question in flight blocks a second one
+      from either entry point.
+- [x] **Last project path isn't remembered** — added `LastProject` to
+      `Settings`; saved on each scan start, restored into the path field in
+      `NewApp`. Verified: settings.json captured the path after a scan, and
+      a fresh launch pre-filled it.
+- [x] **No indeterminate progress indicator while scanning** — added a
+      `widget.NewProgressBarInfinite()` next to the "Scanning…" label,
+      explicitly `.Stop()`ped in the completion callback (its animation
+      loop doesn't stop just because the widget is discarded). Verified via
+      a mid-scan screenshot with a deliberately slowed mock LLM.
+- [x] **Settings dialog silently accepts a broken LLM config** — added
+      `validateLLMConfig`, a pure function checking the binary/model paths
+      are non-empty and exist on disk; the Save handler shows a follow-up
+      `dialog.ShowInformation` listing specific problems (settings are
+      still saved — this warns, it doesn't block). Verified: enabling LLM
+      with empty paths produced a dialog naming both missing paths.
 - [ ] **No way to jump to the on-disk output** — after a scan, the Markdown
       report/diagram/DB are written to `<project>/codelens-out/` but
       there's no button in the window to reveal that folder for someone who
@@ -55,3 +63,9 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (commit noted)
 ## Log
 
 _(one line per landed bit, newest first)_
+
+- Batch 1: log auto-scroll, Enter-to-scan, Ask double-submit guard,
+  remembered last project path, scan progress indicator, Settings LLM-config
+  validation warning. All six manually verified end to end on a virtual
+  display plus new/updated unit tests (`internal/gui` still fully green,
+  headless). 6 of 10 GUI items done; 0 of 0 CLI items queued so far.

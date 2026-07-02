@@ -6,9 +6,11 @@ package gui
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 // Settings holds user-configurable options persisted between runs, stored as
@@ -19,6 +21,10 @@ type Settings struct {
 	LLMBinary  string `json:"llm_binary"`
 	LLMModel   string `json:"llm_model"`
 	LLMThreads int    `json:"llm_threads"`
+
+	// LastProject is the last folder scanned, restored into the path field
+	// on startup so reopening the app doesn't start from a blank slate.
+	LastProject string `json:"last_project"`
 }
 
 // configDir resolves the OS user config directory; a package variable so
@@ -55,6 +61,30 @@ func LoadSettings() Settings {
 		s.LLMThreads = defaults.LLMThreads
 	}
 	return s
+}
+
+// validateLLMConfig reports human-readable problems with s's LLM settings
+// that would cause the LLM pass to be silently skipped on the next scan
+// (internal/cli.RunPipeline treats a missing binary/model as a soft skip,
+// not an error). Returns nil when LLM is disabled or fully configured.
+func validateLLMConfig(s Settings) []string {
+	if !s.LLMEnabled {
+		return nil
+	}
+	var problems []string
+	check := func(path, what string) {
+		switch {
+		case strings.TrimSpace(path) == "":
+			problems = append(problems, fmt.Sprintf("• %s path is empty.", what))
+		default:
+			if _, err := os.Stat(path); err != nil {
+				problems = append(problems, fmt.Sprintf("• %s not found: %s", what, path))
+			}
+		}
+	}
+	check(s.LLMBinary, "llama-cli binary")
+	check(s.LLMModel, "GGUF model file")
+	return problems
 }
 
 // Save persists s as JSON in the local config directory, creating it if

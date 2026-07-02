@@ -23,11 +23,14 @@ type App struct {
 
 	pathEntry *widget.Entry
 	scanBtn   *widget.Button
-	logView   *widget.Entry
+	logView   *widget.Label
+	logScroll *container.Scroll
 	results   *fyne.Container // swapped between a placeholder and the report tabs
 
 	result     cli.PipelineResult
 	haveResult bool
+
+	scanProgress *widget.ProgressBarInfinite // non-nil only while a scan is running
 }
 
 // NewApp builds the application and its main window, loading any previously
@@ -40,6 +43,7 @@ func NewApp() *App {
 	a.win = a.fyneApp.NewWindow("CodeLens Local")
 	a.win.Resize(fyne.NewSize(1100, 750))
 	a.win.SetContent(a.buildContent())
+	a.pathEntry.SetText(a.settings.LastProject)
 	return a
 }
 
@@ -51,6 +55,7 @@ func (a *App) ShowAndRun() {
 func (a *App) buildContent() fyne.CanvasObject {
 	a.pathEntry = widget.NewEntry()
 	a.pathEntry.SetPlaceHolder("Choose a project folder to scan…")
+	a.pathEntry.OnSubmitted = func(string) { a.startScan() }
 
 	browseBtn := widget.NewButtonWithIcon("Browse…", nil, func() {
 		dialog.ShowFolderOpen(func(u fyne.ListableURI, err error) {
@@ -72,17 +77,20 @@ func (a *App) buildContent() fyne.CanvasObject {
 		a.pathEntry,
 	)
 
-	a.logView = widget.NewMultiLineEntry()
-	a.logView.Disable() // read-only diagnostics log
-	logScroll := container.NewVScroll(a.logView)
-	logScroll.SetMinSize(fyne.NewSize(0, 160))
+	// A widget.Entry manages its own internal scrolling, which can't be
+	// driven from outside the widget — so a plain Label wrapped in a Scroll
+	// this code fully owns is what makes appendLog's ScrollToBottom work.
+	a.logView = widget.NewLabel("")
+	a.logView.Wrapping = fyne.TextWrapWord
+	a.logScroll = container.NewVScroll(a.logView)
+	a.logScroll.SetMinSize(fyne.NewSize(0, 160))
 
 	placeholder := container.NewCenter(widget.NewLabel(
 		"Choose a project folder and click Scan.\nAnalysis runs fully offline — nothing leaves this machine.",
 	))
 	a.results = container.NewStack(placeholder)
 
-	center := container.NewBorder(nil, container.NewVBox(widget.NewLabel("Log"), logScroll), nil, nil, a.results)
+	center := container.NewBorder(nil, container.NewVBox(widget.NewLabel("Log"), a.logScroll), nil, nil, a.results)
 
 	return container.NewBorder(top, nil, nil, nil, center)
 }
@@ -93,7 +101,7 @@ func (a *App) appendLog(line string) {
 	} else {
 		a.logView.SetText(line)
 	}
-	a.logView.CursorRow = len(a.logView.Text)
+	a.logScroll.ScrollToBottom()
 }
 
 func (a *App) startScan() {
@@ -105,8 +113,18 @@ func (a *App) startScan() {
 
 	a.scanBtn.Disable()
 	a.logView.SetText("")
-	a.results.Objects = []fyne.CanvasObject{container.NewCenter(widget.NewLabel("Scanning…"))}
+	a.scanProgress = widget.NewProgressBarInfinite()
+	a.results.Objects = []fyne.CanvasObject{container.NewCenter(container.NewVBox(
+		widget.NewLabel("Scanning…"), a.scanProgress,
+	))}
 	a.results.Refresh()
+
+	if root != a.settings.LastProject {
+		a.settings.LastProject = root
+		if err := a.settings.Save(); err != nil {
+			a.appendLog("warning: failed to remember this project path: " + err.Error())
+		}
+	}
 
 	go a.runScan(root)
 }
@@ -130,6 +148,10 @@ func (a *App) runScan(root string) {
 
 	fyne.Do(func() {
 		a.scanBtn.Enable()
+		if a.scanProgress != nil {
+			a.scanProgress.Stop()
+			a.scanProgress = nil
+		}
 		if err != nil {
 			a.results.Objects = []fyne.CanvasObject{container.NewCenter(widget.NewLabel("Scan failed. See error dialog."))}
 			a.results.Refresh()
