@@ -16,6 +16,7 @@
 - **`--ask` mode** — answer a question about the codebase using indexed citations, no model needed
 - **Grounded `--ask`** (optional, offline) — combine `--ask` with `--llm` for a plain-English answer generated from retrieved source snippets, always cited, falling back to citations-only if the model fails
 - **Hybrid LLM summaries** (optional, offline) — project overview + per-file annotations grounded in verified symbols and bounded source excerpts, with real-time loop diagnostics on stderr
+- **Native desktop app** (`codelens-gui`) — a real window with tabs, tables, a clickable architecture diagram, and a Q&A chat panel; no browser, no localhost, nothing to host
 - **Cross-platform** — static CGO-free binary for macOS, Linux, and Windows
 
 ---
@@ -134,6 +135,71 @@ error, hallucinated symbol name) the deterministic report is still written and a
 
 ---
 
+## Desktop App (`codelens-gui`)
+
+CodeLens Local also ships as a genuine desktop application — one native
+window you open like any other program on your computer. There is no
+browser involved, no `localhost` address to visit, and nothing running as a
+web server: `codelens-gui` is a single executable that opens its own window
+using your OS's native windowing toolkit.
+
+```sh
+make run-gui                    # for development
+# or, after `make build-gui`:
+./bin/codelens-gui
+```
+
+Inside the window:
+
+- **Project bar** — type or browse to a folder, click **Scan**, and watch
+  the diagnostics stream into the log panel in real time (the same
+  `[LLM Loop]` lines the CLI prints, just inside the window instead of on
+  your terminal).
+- **Nine tabs** rendered natively from the scan results — Summary, Tech
+  Stack, Folders, Entry Points, a filterable Functions & Classes table,
+  Imports, AI-Assisted Summaries (as collapsible cards), a clickable
+  architecture **Diagram** drawn on a native canvas (no Mermaid renderer,
+  no image export step), and an **Ask** tab that behaves like a chat: type
+  a question, get a cited answer back as a bubble.
+- **Settings** — enable the local LLM pass, and point it at your `llama-cli`
+  binary and `.gguf` model file with a native file picker. Settings are
+  saved as plain JSON under your OS user config directory (e.g.
+  `~/.config/codelens/settings.json` on Linux) — nothing is ever uploaded.
+
+`codelens-gui` calls the exact same scan/index/diagram/LLM pipeline as the
+CLI (`internal/cli`'s exported `RunPipeline`/`Answer` functions) — it is a
+front end over the same code, not a reimplementation, and it writes the
+same `CODEBASE_REPORT.md`, `architecture.mmd`, `codelens.db`, and
+`ANSWER.md` files to `<project>/codelens-out/` alongside the interactive
+view. If a local LLM subprocess is needed, `codelens-gui` launches and owns
+it internally — you never start, see, or manage a server yourself.
+
+### Building `codelens-gui` from source
+
+Unlike `codelens`, which is a CGO-free static binary, `codelens-gui` uses
+[Fyne](https://fyne.io) — a native (non-web) Go GUI toolkit — which requires
+CGO and your OS's graphics headers to *build*. This is a build-time
+requirement only; the compiled binary just needs the graphics libraries
+your desktop already has to *run*.
+
+```sh
+# Linux (Debian/Ubuntu) — one-time setup
+sudo apt-get install pkg-config libgl1-mesa-dev xorg-dev
+
+# macOS — Xcode command line tools (usually already installed)
+xcode-select --install
+
+# Windows — a C compiler such as the one bundled with MSYS2/TDM-GCC
+
+make build-gui   # → bin/codelens-gui
+```
+
+Because it needs CGO, `codelens-gui` can't be cross-compiled from one
+machine the way `make release` cross-compiles the CLI for six platforms at
+once — build it natively on (or for) each target OS.
+
+---
+
 ## All Flags
 
 ```
@@ -160,8 +226,10 @@ codelens [flags] <directory>
 make lint          # gofmt + go vet
 make test          # go test ./...
 make build         # CGO_ENABLED=0 go build → bin/codelens
+make build-gui     # go build → bin/codelens-gui (native desktop app)
 make smoke         # build + end-to-end smoke against sample fixtures
 make run DIR=./testdata/sample_python
+make run-gui       # launch the desktop app for development
 ```
 
 Sample fixtures in `testdata/`:
@@ -209,11 +277,19 @@ CodeLens Local never:
 - Executes or imports code from the scanned project
 - Makes network calls during analysis
 - Follows symlinks outside the scanned root
-- Uses CGo (builds with `CGO_ENABLED=0`)
+
+The `codelens` CLI additionally builds with `CGO_ENABLED=0` (a fully static,
+dependency-free binary). `codelens-gui` is the one exception to that: a
+native desktop GUI toolkit requires CGO to link against your OS's windowing
+libraries, so that binary alone is not CGO-free — it makes exactly the same
+guarantees above (no code execution, no network calls, no symlink escapes)
+and reuses the CLI's own pipeline code, but it is a dynamically linked
+executable rather than a static one.
 
 The optional LLM pass runs a separately-installed local binary
 (`llama-cli`) as a subprocess — the scanned project's code is never passed
-to any remote endpoint.
+to any remote endpoint. Both the CLI and the desktop app launch and own this
+subprocess internally; neither ever starts a server or opens a network port.
 
 ---
 

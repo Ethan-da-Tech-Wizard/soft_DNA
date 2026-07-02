@@ -835,7 +835,7 @@ func TestRunWritesStalledFilesToReport(t *testing.T) {
 		nil,
 		nil,
 		nil,
-		indexStats{},
+		IndexStats{},
 		"",
 		llmRes,
 	)
@@ -895,23 +895,12 @@ func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 		t.Fatalf("buildIndex failed: %v", err)
 	}
 
-	// Capture stderr diagnostic output
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, files)
-
-	w.Close()
-	os.Stderr = oldStderr
-
+	var diagBuf bytes.Buffer
+	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, files, &diagBuf)
 	if err != nil {
 		t.Fatalf("runLLMPipeline failed: %v", err)
 	}
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	diagOutput := buf.String()
+	diagOutput := diagBuf.String()
 
 	if res.ProjectOverview != "A successful project overview." {
 		t.Errorf("ProjectOverview = %q, want 'A successful project overview.'", res.ProjectOverview)
@@ -1046,5 +1035,71 @@ func TestRunAskLLMFallsBackToFTS(t *testing.T) {
 		if !strings.Contains(answer, want) {
 			t.Fatalf("fallback answer missing %q:\n%s", want, answer)
 		}
+	}
+}
+
+// TestRunPipelineAPI locks in the exported PipelineOptions/RunPipeline/
+// WriteMarkdownReport/Answer contract that the GUI front end depends on
+// instead of duplicating pipeline orchestration.
+func TestRunPipelineAPI(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "sample_python")
+	outDir := filepath.Join(t.TempDir(), "out")
+
+	res, err := RunPipeline(PipelineOptions{Root: root, OutDir: outDir}, io.Discard)
+	if err != nil {
+		t.Fatalf("RunPipeline failed: %v", err)
+	}
+	if len(res.Files) == 0 {
+		t.Fatal("RunPipeline returned no files")
+	}
+	if res.LLM.Enabled {
+		t.Fatal("LLM should be disabled when LLMEnabled is false")
+	}
+	if len(res.Warnings) != 0 {
+		t.Fatalf("unexpected warnings with LLM disabled: %v", res.Warnings)
+	}
+
+	if err := WriteMarkdownReport(res); err != nil {
+		t.Fatalf("WriteMarkdownReport failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, reportName)); err != nil {
+		t.Fatalf("expected report file: %v", err)
+	}
+
+	ans, err := Answer(AnswerOptions{Root: root, OutDir: outDir, Question: "what does hello do?", Entries: res.Entries})
+	if err != nil {
+		t.Fatalf("Answer failed: %v", err)
+	}
+	if len(ans.Hits) == 0 {
+		t.Fatal("Answer returned no hits")
+	}
+	if ans.LLMAnswer != "" {
+		t.Fatalf("LLMAnswer should be empty without LLM configured, got %q", ans.LLMAnswer)
+	}
+	if _, err := os.Stat(filepath.Join(outDir, answerName)); err != nil {
+		t.Fatalf("expected answer file: %v", err)
+	}
+}
+
+func TestRunPipelineInvalidRoot(t *testing.T) {
+	_, err := RunPipeline(PipelineOptions{Root: filepath.Join(t.TempDir(), "missing")}, io.Discard)
+	if err == nil {
+		t.Fatal("expected an error for a missing root")
+	}
+	if !IsInvalidRoot(err) {
+		t.Fatalf("IsInvalidRoot(%v) = false, want true", err)
+	}
+}
+
+func TestRunPipelineLLMWarningOnMissingBinary(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "sample_python")
+	outDir := filepath.Join(t.TempDir(), "out")
+
+	res, err := RunPipeline(PipelineOptions{Root: root, OutDir: outDir, LLMEnabled: true}, io.Discard)
+	if err != nil {
+		t.Fatalf("RunPipeline failed: %v", err)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "binary or model path is missing") {
+		t.Fatalf("Warnings = %v, want one binary/model-missing warning", res.Warnings)
 	}
 }
