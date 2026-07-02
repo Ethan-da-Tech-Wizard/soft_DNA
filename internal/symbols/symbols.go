@@ -53,7 +53,35 @@ var (
 	sqlTableRe   = regexp.MustCompile(`(?i)^\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z0-9_.]+)`)
 	sqlViewRe    = regexp.MustCompile(`(?i)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?VIEW\s+([A-Za-z0-9_.]+)`)
 	sqlProcRe    = regexp.MustCompile(`(?i)^\s*CREATE\s+PROCEDURE\s+([A-Za-z0-9_.]+)`)
+
+	// Openers mark lines that may begin a multi-line function signature and
+	// are safe to join with continuation lines (see joinUnclosed).
+	pyOpenerRe = regexp.MustCompile(`^(?:class|def)\s`)
+	jsOpenerRe = regexp.MustCompile(`^(?:export\s+)?(?:async\s+)?function\s`)
+	rsOpenerRe = regexp.MustCompile(`^\s*(?:pub\s+)?(?:async\s+)?fn\s`)
 )
+
+// maxJoinLines bounds how many continuation lines a multi-line signature may
+// pull in; anything longer stays truncated rather than risking a runaway join.
+const maxJoinLines = 3
+
+// unbalanced reports whether s opens more parentheses than it closes.
+func unbalanced(s string) bool {
+	return strings.Count(s, "(") > strings.Count(s, ")")
+}
+
+// joinUnclosed joins up to maxJoinLines following lines onto lines[i] while
+// the parameter list remains unclosed, collapsing runs of whitespace.
+// It returns the joined logical line and the index of the last line consumed.
+func joinUnclosed(lines []string, i int) (string, int) {
+	joined := strings.TrimSpace(lines[i])
+	j := i
+	for unbalanced(joined) && j+1 < len(lines) && j-i < maxJoinLines {
+		j++
+		joined += " " + strings.TrimSpace(lines[j])
+	}
+	return strings.Join(strings.Fields(joined), " "), j
+}
 
 // ExtractAll extracts symbols for supported files.
 func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
@@ -188,12 +216,12 @@ func goSignature(name string, fn *ast.FuncDecl) string {
 
 func extractPython(path string, data []byte) []Symbol {
 	var out []Symbol
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	line := 0
-	for scanner.Scan() {
-		line++
-		trimmed := strings.TrimSpace(scanner.Text())
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+	lines := strings.Split(string(data), "\n")
+	for i := 0; i < len(lines); i++ {
+		startLine := i + 1
+		trimmed := strings.TrimSpace(lines[i])
+		// Decorators never block the def/class on the following line.
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "@") {
 			continue
 		}
 		if match := pyImportRe.FindStringSubmatch(trimmed); match != nil {
@@ -201,8 +229,11 @@ func extractPython(path string, data []byte) []Symbol {
 			if name == "" {
 				name = match[3]
 			}
-			out = append(out, Symbol{Name: name, Kind: "import", File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: name, Kind: "import", File: path, StartLine: startLine, EndLine: startLine})
 			continue
+		}
+		if pyOpenerRe.MatchString(trimmed) && unbalanced(trimmed) {
+			trimmed, i = joinUnclosed(lines, i)
 		}
 		if match := pyDefRe.FindStringSubmatch(trimmed); match != nil {
 			kind := "function"
@@ -214,8 +245,8 @@ func extractPython(path string, data []byte) []Symbol {
 				Kind:      kind,
 				Signature: strings.TrimSuffix(trimmed, ":"),
 				File:      path,
-				StartLine: line,
-				EndLine:   line,
+				StartLine: startLine,
+				EndLine:   i + 1,
 			})
 		}
 	}
@@ -224,28 +255,31 @@ func extractPython(path string, data []byte) []Symbol {
 
 func extractJS(path string, data []byte) []Symbol {
 	var out []Symbol
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	line := 0
-	for scanner.Scan() {
-		line++
-		trimmed := strings.TrimSpace(scanner.Text())
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+	lines := strings.Split(string(data), "\n")
+	for i := 0; i < len(lines); i++ {
+		startLine := i + 1
+		trimmed := strings.TrimSpace(lines[i])
+		// Decorators never block the declaration on the following line.
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "@") {
 			continue
 		}
 		if match := jsImportRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: strings.TrimSpace(match[1]), Kind: "import", File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: strings.TrimSpace(match[1]), Kind: "import", File: path, StartLine: startLine, EndLine: startLine})
 			continue
 		}
+		if jsOpenerRe.MatchString(trimmed) && unbalanced(trimmed) {
+			trimmed, i = joinUnclosed(lines, i)
+		}
 		if match := jsFuncRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: startLine, EndLine: i + 1})
 			continue
 		}
 		if match := jsClassRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "class", Signature: trimmed, File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "class", Signature: trimmed, File: path, StartLine: startLine, EndLine: startLine})
 			continue
 		}
 		if match := jsArrowRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: startLine, EndLine: startLine})
 		}
 	}
 	return out
@@ -349,24 +383,27 @@ func extractR(path string, data []byte) []Symbol {
 
 func extractRust(path string, data []byte) []Symbol {
 	var out []Symbol
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	line := 0
-	for sc.Scan() {
-		line++
-		trimmed := strings.TrimSpace(sc.Text())
-		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
+	lines := strings.Split(string(data), "\n")
+	for i := 0; i < len(lines); i++ {
+		startLine := i + 1
+		trimmed := strings.TrimSpace(lines[i])
+		// Attributes (#[derive(...)] etc.) never block the item below them.
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#[") {
 			continue
 		}
 		if match := rsImportRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "import", File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "import", File: path, StartLine: startLine, EndLine: startLine})
 			continue
 		}
+		if rsOpenerRe.MatchString(trimmed) && unbalanced(trimmed) {
+			trimmed, i = joinUnclosed(lines, i)
+		}
 		if match := rsFuncRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "function", Signature: trimmed, File: path, StartLine: startLine, EndLine: i + 1})
 			continue
 		}
 		if match := rsTypeRe.FindStringSubmatch(trimmed); match != nil {
-			out = append(out, Symbol{Name: match[1], Kind: "type", Signature: trimmed, File: path, StartLine: line, EndLine: line})
+			out = append(out, Symbol{Name: match[1], Kind: "type", Signature: trimmed, File: path, StartLine: startLine, EndLine: startLine})
 		}
 	}
 	return out
@@ -390,7 +427,9 @@ func extractC(path string, data []byte) []Symbol {
 			out = append(out, Symbol{Name: match[1], Kind: "type", Signature: trimmed, File: path, StartLine: line, EndLine: line})
 			continue
 		}
-		if match := cFuncRe.FindStringSubmatch(trimmed); match != nil {
+		// Lines ending in ';' are prototypes or call statements, not
+		// definition bodies — rejecting them kills most false positives.
+		if match := cFuncRe.FindStringSubmatch(trimmed); match != nil && !strings.HasSuffix(trimmed, ";") {
 			name := match[1]
 			if name == "if" || name == "while" || name == "for" || name == "switch" || name == "return" {
 				continue
@@ -419,7 +458,9 @@ func extractCPP(path string, data []byte) []Symbol {
 			out = append(out, Symbol{Name: match[1], Kind: "class", Signature: trimmed, File: path, StartLine: line, EndLine: line})
 			continue
 		}
-		if match := cppFuncRe.FindStringSubmatch(trimmed); match != nil {
+		// Lines ending in ';' are prototypes or call statements, not
+		// definition bodies — rejecting them kills most false positives.
+		if match := cppFuncRe.FindStringSubmatch(trimmed); match != nil && !strings.HasSuffix(trimmed, ";") {
 			name := match[1]
 			if name == "if" || name == "while" || name == "switch" || name == "for" || name == "catch" || name == "return" {
 				continue
