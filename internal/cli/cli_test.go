@@ -851,4 +851,3 @@ func TestRunWritesStalledFilesToReport(t *testing.T) {
 		t.Fatalf("report missing stalled warning %q:\n%s", want, report)
 	}
 }
-
