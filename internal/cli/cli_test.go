@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"codelens-local/internal/grounding"
 	"codelens-local/internal/llm"
 	"codelens-local/internal/scanner"
 	"codelens-local/internal/stackdetect"
+	"codelens-local/internal/symbols"
 )
 
 func TestRunWritesReportForDirectory(t *testing.T) {
@@ -849,5 +852,79 @@ func TestRunWritesStalledFilesToReport(t *testing.T) {
 	want := "*Skipped after repeated validation failures: a.py, b.py*"
 	if !strings.Contains(report, want) {
 		t.Fatalf("report missing stalled warning %q:\n%s", want, report)
+	}
+}
+
+func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+
+	calls := 0
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		calls++
+		if strings.Contains(prompt, "Project root:") {
+			if calls == 1 {
+				// Turn 1: invalid JSON for project overview
+				return []byte("malformed json"), nil
+			}
+			// Turn 2: retry succeeds
+			return []byte(`{"project_description": "A successful project overview."}`), nil
+		}
+		// File explain prompt
+		return []byte(`{"file_summary": "A Python module.", "symbol_explanations": []}`), nil
+	}
+
+	// Create a temp folder and build index
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "codelens.db")
+
+	// Create mock files
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.py"), []byte("def hello():\n    print('hello')\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	files := []scanner.FileInfo{
+		{Path: "main.py", Language: "Python", LineCount: 10},
+	}
+
+	// Seed index database manually or using buildIndex
+	_, err := buildIndex(tmpDir, tmpDir, files, []symbols.Symbol{
+		{File: "main.py", Name: "hello", Kind: "function", StartLine: 1},
+	})
+	if err != nil {
+		t.Fatalf("buildIndex failed: %v", err)
+	}
+
+	// Capture stderr diagnostic output
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, files)
+
+	w.Close()
+	os.Stderr = oldStderr
+
+	if err != nil {
+		t.Fatalf("runLLMPipeline failed: %v", err)
+	}
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	diagOutput := buf.String()
+
+	if res.ProjectOverview != "A successful project overview." {
+		t.Errorf("ProjectOverview = %q, want 'A successful project overview.'", res.ProjectOverview)
+	}
+
+	// The loop diagnostics should show Turn 1 (failure) and Turn 2 (success) for segment 0 (overview)
+	wantLines := []string{
+		"[LLM Loop] Turn 1: Coverage = 0.00 | Throttle = 0.75 | Health = 0 | Stall = 1",
+		"[LLM Loop] Turn 2: Coverage = 0.00 | Throttle = 0.50 | Health = 1 | Stall = 0",
+	}
+	for _, want := range wantLines {
+		if !strings.Contains(diagOutput, want) {
+			t.Errorf("diagnostics missing line %q:\n%s", want, diagOutput)
+		}
 	}
 }

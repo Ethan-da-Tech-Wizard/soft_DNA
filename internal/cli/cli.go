@@ -688,7 +688,30 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 		FileSummaries: make(map[string]validate.FileExplanation),
 	}
 
-	// 1. Project Overview Summarization
+	// Build map for quick FileInfo lookup by path
+	infoMap := make(map[string]scanner.FileInfo, len(files))
+	for _, f := range files {
+		infoMap[f.Path] = f
+	}
+
+	// Extract symbols grouped by file and get a sorted list of unique file paths
+	fileSymbols := make(map[string][]grounding.SymbolEntry)
+	for _, sym := range gCtx.TopSymbols {
+		fileSymbols[sym.File] = append(fileSymbols[sym.File], sym)
+	}
+	var fileList []string
+	for f := range fileSymbols {
+		fileList = append(fileList, f)
+	}
+	sort.Strings(fileList)
+
+	if maxFiles > 0 && len(fileList) > maxFiles {
+		fileList = fileList[:maxFiles]
+	}
+
+	diag := llm.NewLoopState(1+len(fileList), os.Stderr)
+
+	// 1. Project Overview Summarization (Segment 0)
 	projPrompt, err := grounding.FormatProjectOverviewPrompt(gCtx)
 	if err == nil {
 		projGrammar, projCleanup, gErr := llm.WriteGrammar("project_overview.gbnf")
@@ -704,46 +727,49 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				Timeout:        timeout,
 				MaxOutputBytes: 8192,
 			}
-			out, runErr := llm.Run(context.Background(), cfg, projPrompt)
-			if runErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: LLM project overview run failed: %v\n", runErr)
-			} else {
-				pe, valErr := validate.ValidateProjectExplanation(out)
-				if valErr != nil {
-					fmt.Fprintf(os.Stderr, "warning: LLM project overview validation failed: %v (raw: %q)\n", valErr, string(out))
+			for {
+				diag.BeginTurn()
+				out, runErr := llmRun(context.Background(), cfg, projPrompt)
+
+				var pe validate.ProjectExplanation
+				valid := false
+				if runErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: LLM project overview run failed: %v\n", runErr)
 				} else {
+					var valErr error
+					pe, valErr = validate.ValidateProjectExplanation(out)
+					if valErr != nil {
+						fmt.Fprintf(os.Stderr, "warning: LLM project overview validation failed: %v (raw: %q)\n", valErr, string(out))
+					} else {
+						valid = true
+					}
+				}
+				diag.EndTurn(valid)
+
+				if valid {
 					res.ProjectOverview = pe.ProjectDescription
+					break
+				}
+				if diag.Stalled() {
+					fmt.Fprintf(os.Stderr, "warning: LLM project overview stalled after %d failed turns; skipping\n", diag.Stall)
+					diag.ForceAdvance()
+					break
 				}
 			}
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: LLM project overview grammar write failed: %v\n", gErr)
+			diag.BeginTurn()
+			diag.EndTurn(false)
+			diag.ForceAdvance()
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "warning: LLM project overview prompt format failed: %v\n", err)
+		diag.BeginTurn()
+		diag.EndTurn(false)
+		diag.ForceAdvance()
 	}
 
-	// Build map for quick FileInfo lookup by path
-	infoMap := make(map[string]scanner.FileInfo, len(files))
-	for _, f := range files {
-		infoMap[f.Path] = f
-	}
-
-	// 2. Per-File Summarization
-	// Extract symbols grouped by file and get a sorted list of unique file paths
-	fileSymbols := make(map[string][]grounding.SymbolEntry)
-	for _, sym := range gCtx.TopSymbols {
-		fileSymbols[sym.File] = append(fileSymbols[sym.File], sym)
-	}
-	var fileList []string
-	for f := range fileSymbols {
-		fileList = append(fileList, f)
-	}
-	sort.Strings(fileList)
-
-	if len(fileList) > maxFiles {
-		fileList = fileList[:maxFiles]
-	}
-
+	// 2. Per-File Summarization (Segments 1 to N)
 	if len(fileList) > 0 {
 		fileGrammar, fileCleanup, gErr := llm.WriteGrammar("file_explain.gbnf")
 		if gErr == nil {
@@ -758,7 +784,6 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				Timeout:        timeout,
 				MaxOutputBytes: 8192,
 			}
-			diag := llm.NewLoopState(len(fileList), os.Stderr)
 			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, os.Stderr)
 		} else {
 			fmt.Fprintf(os.Stderr, "warning: LLM file explain grammar write failed: %v\n", gErr)
