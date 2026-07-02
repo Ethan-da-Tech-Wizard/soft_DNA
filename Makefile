@@ -1,6 +1,7 @@
-.PHONY: build test lint run smoke release clean
+.PHONY: build build-gui test lint run run-gui smoke release clean
 
 BINARY := codelens
+GUI_BINARY := codelens-gui
 DIR ?= ./testdata/sample_empty
 VERSION ?= dev
 LDFLAGS := -s -w -X main.version=$(VERSION)
@@ -8,6 +9,15 @@ PLATFORMS := darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 win
 
 build:
 	CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o bin/$(BINARY) ./cmd/codelens
+
+# codelens-gui is the native desktop app (Fyne). Unlike codelens it needs
+# CGO plus the system OpenGL/X11 dev headers to build (on Linux:
+# pkg-config, libgl1-mesa-dev, xorg-dev or equivalents; macOS/Windows only
+# need Xcode / a C compiler, which Fyne's own docs cover). Because it's a
+# CGO build it cannot be cross-compiled from one machine like `release`
+# does for the CLI — build it natively on/for each target OS.
+build-gui:
+	go build -ldflags "$(LDFLAGS)" -o bin/$(GUI_BINARY) ./cmd/codelens-gui
 
 test:
 	go test ./...
@@ -18,6 +28,9 @@ lint:
 
 run:
 	go run ./cmd/codelens $(DIR)
+
+run-gui:
+	go run ./cmd/codelens-gui
 
 smoke: build
 	rm -rf codelens-out

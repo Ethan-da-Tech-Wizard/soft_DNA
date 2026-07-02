@@ -21,6 +21,12 @@ jobs:
           go-version: "1.25.x"
           cache: true
 
+      # Only codelens-gui (internal/gui) needs these: it's a CGO build using
+      # Fyne's native (non-web) GUI toolkit, which links against the system
+      # OpenGL/X11 libraries. codelens itself stays a CGO-free static binary.
+      - name: Install GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libgl1-mesa-dev xorg-dev
+
       - name: Format check
         run: test -z "$(gofmt -l .)"
 
@@ -30,5 +36,8 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Build
+      - name: Build codelens (CGO-free CLI)
         run: CGO_ENABLED=0 go build ./cmd/codelens
+
+      - name: Build codelens-gui (native desktop app)
+        run: go build ./cmd/codelens-gui
