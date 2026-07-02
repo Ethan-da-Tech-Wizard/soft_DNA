@@ -149,6 +149,34 @@ func ValidateFileExplanation(raw []byte, allowedSymbols []string) (FileExplanati
 	return fe, errs
 }
 
+// AskAnswer is the parsed and validated output of a grounded --ask LLM call.
+// Its shape must match internal/llm/grammars/ask_answer.gbnf.
+type AskAnswer struct {
+	Answer string `json:"answer"`
+}
+
+const maxAskAnswerLen = 1500
+
+// ValidateAskAnswer parses raw LLM JSON output for a grounded --ask call and
+// sanitizes the answer prose. Truncation is silent, mirroring
+// ValidateProjectExplanation; a hard error is returned only when the JSON is
+// structurally invalid.
+func ValidateAskAnswer(raw []byte) (AskAnswer, error) {
+	var aa AskAnswer
+	lastCurly := bytes.LastIndexByte(raw, '}')
+	if lastCurly != -1 {
+		raw = raw[:lastCurly+1]
+	}
+
+	if err := json.Unmarshal(raw, &aa); err != nil {
+		return AskAnswer{}, fmt.Errorf("validate: parse ask answer: %w", err)
+	}
+	aa.Answer = sanitizeText(aa.Answer)
+	truncated, _ := truncateRunes(aa.Answer, maxAskAnswerLen)
+	aa.Answer = truncated
+	return aa, nil
+}
+
 // ValidateProjectExplanation parses raw LLM JSON output for a project overview
 // and sanitizes the prose description. Truncation is silent (no ValidationError)
 // because a long description is always recoverable by reading less of it.

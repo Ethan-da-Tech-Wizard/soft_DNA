@@ -141,7 +141,22 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	}
 
 	if strings.TrimSpace(*question) != "" {
-		if err := writeAnswer(*outDir, *question, entries); err != nil {
+		hits, err := answerHits(*outDir, *question, entries)
+		if err != nil {
+			fmt.Fprintf(stderr, "failed to write answer: %v\n", err)
+			return exitInternal
+		}
+		llmAnswer := ""
+		if *llmEnabled && *llmBinary != "" && *llmModel != "" {
+			answer, aErr := answerWithLLM(root, *question, hits, *llmBinary, *llmModel, *llmThreads, *llmTimeout)
+			if aErr != nil {
+				fmt.Fprintf(stderr, "warning: grounded LLM answer failed: %v; falling back to FTS citations\n", aErr)
+			} else {
+				llmAnswer = answer
+				fmt.Fprintln(stdout, answer)
+			}
+		}
+		if err := writeAnswer(*outDir, *question, hits, llmAnswer); err != nil {
 			fmt.Fprintf(stderr, "failed to write answer: %v\n", err)
 			return exitInternal
 		}
@@ -366,11 +381,13 @@ func buildIndex(root, outDir string, files []scanner.FileInfo, symbolList []symb
 	return indexStats{Path: dbPath, Files: fileRows, Symbols: symbolRows, SearchRows: searchRows}, nil
 }
 
-func writeAnswer(outDir, question string, entries []structure.EntryPoint) error {
+// answerHits retrieves the top indexed matches for an --ask question,
+// giving priority to entry points for start/entry/main-style questions.
+func answerHits(outDir, question string, entries []structure.EntryPoint) ([]searchindex.Hit, error) {
 	dbPath := filepath.Join(outDir, dbName)
 	store, err := searchindex.Open(dbPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer store.Close()
 
@@ -382,17 +399,29 @@ func writeAnswer(outDir, question string, entries []structure.EntryPoint) error 
 
 	hits, err := store.Search(question, limit)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	hits = mergeHits(entryHits, hits)
+	return mergeHits(entryHits, hits), nil
+}
 
+// writeAnswer renders ANSWER.md. With an empty llmAnswer the output is the
+// FTS-citations-only format; with one, the grounded LLM answer replaces the
+// file list in the Answer section and the Mode line says so.
+func writeAnswer(outDir, question string, hits []searchindex.Hit, llmAnswer string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# CodeLens Local Answer\n\nQuestion: %s\n\n", escapeMarkdown(strings.TrimSpace(question)))
-	b.WriteString("Mode: local FTS retrieval only. No model, network call, or target-code execution was used.\n\n")
-	b.WriteString("## Answer\n\n")
-	if len(hits) == 0 {
-		b.WriteString("No indexed matches were found for this question.\n")
+	if llmAnswer != "" {
+		b.WriteString("Mode: grounded local LLM answer over retrieved snippets. No network call or target-code execution was used.\n\n")
 	} else {
+		b.WriteString("Mode: local FTS retrieval only. No model, network call, or target-code execution was used.\n\n")
+	}
+	b.WriteString("## Answer\n\n")
+	switch {
+	case llmAnswer != "":
+		b.WriteString(llmAnswer + "\n")
+	case len(hits) == 0:
+		b.WriteString("No indexed matches were found for this question.\n")
+	default:
 		b.WriteString("The most relevant indexed files are:\n\n")
 		for _, hit := range hits {
 			fmt.Fprintf(&b, "- %s\n", escapeMarkdown(hit.Path))
@@ -409,6 +438,88 @@ func writeAnswer(outDir, question string, entries []structure.EntryPoint) error 
 	}
 
 	return os.WriteFile(filepath.Join(outDir, answerName), []byte(b.String()), 0o644)
+}
+
+// Snippet budgets for the grounded --ask prompt: enough context to answer,
+// small enough to stay inside a local model's window with five files.
+const (
+	askSnippetMaxLines = 20
+	askSnippetMaxBytes = 1200
+)
+
+// answerWithLLM produces a grounded plain-English answer to question using
+// bounded snippets from the FTS hit files and one local LLM call. Any failure
+// returns an error so the caller can fall back to FTS-only citations.
+func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, modelPath string, threads int, timeout time.Duration) (string, error) {
+	if len(hits) == 0 {
+		return "", errors.New("no indexed matches to ground an answer")
+	}
+
+	var snippets []grounding.AskSnippet
+	for _, hit := range hits {
+		rel, ok := relInside(root, filepath.Join(root, filepath.FromSlash(hit.Path)))
+		if !ok {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		var kept []string
+		bytesKept := 0
+		for i := 0; i < len(lines) && i < askSnippetMaxLines; i++ {
+			// Injection defense: a snippet line can never fake a zone boundary.
+			line := strings.ReplaceAll(lines[i], ">>>", "")
+			if bytesKept+len(line)+1 > askSnippetMaxBytes {
+				break
+			}
+			kept = append(kept, line)
+			bytesKept += len(line) + 1
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		snippets = append(snippets, grounding.AskSnippet{Path: hit.Path, Content: strings.Join(kept, "\n") + "\n"})
+	}
+	if len(snippets) == 0 {
+		return "", errors.New("no readable snippets among indexed matches")
+	}
+
+	prompt, err := grounding.FormatAskPrompt(question, snippets)
+	if err != nil {
+		return "", err
+	}
+
+	grammar, cleanup, err := llm.WriteGrammar("ask_answer.gbnf")
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+
+	cfg := llm.Config{
+		BinaryPath:     binaryPath,
+		ModelPath:      modelPath,
+		GrammarPath:    grammar,
+		Threads:        threads,
+		MaxTokens:      512,
+		Temperature:    0.1,
+		Timeout:        timeout,
+		MaxOutputBytes: 8192,
+	}
+	raw, err := llmRun(context.Background(), cfg, prompt)
+	if err != nil {
+		return "", err
+	}
+
+	aa, err := validate.ValidateAskAnswer(raw)
+	if err != nil {
+		return "", err
+	}
+	if aa.Answer == "" {
+		return "", errors.New("LLM returned an empty answer")
+	}
+	return aa.Answer, nil
 }
 
 func outputAwareIgnores(root, outDir string, userIgnores []string) []string {
