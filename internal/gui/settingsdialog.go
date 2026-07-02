@@ -2,6 +2,7 @@ package gui
 
 import (
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -60,13 +61,19 @@ func (a *App) showSettingsDialog() {
 			threads = a.settings.LLMThreads
 		}
 		a.settings = Settings{
-			LLMEnabled: enabled.Checked,
-			LLMBinary:  binaryEntry.Text,
-			LLMModel:   modelEntry.Text,
-			LLMThreads: threads,
+			LLMEnabled:  enabled.Checked,
+			LLMBinary:   binaryEntry.Text,
+			LLMModel:    modelEntry.Text,
+			LLMThreads:  threads,
+			LastProject: a.settings.LastProject,
 		}
 		if err := a.settings.Save(); err != nil {
 			dialog.ShowError(err, a.win)
+		}
+		if problems := validateLLMConfig(a.settings); len(problems) > 0 {
+			dialog.ShowInformation("LLM settings need attention",
+				"Settings were saved, but the local LLM pass will be skipped until this is fixed:\n\n"+strings.Join(problems, "\n"),
+				a.win)
 		}
 	}, a.win)
 	d.Resize(fyne.NewSize(520, 260))

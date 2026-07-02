@@ -33,6 +33,9 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 
 	send := widget.NewButton("Send", nil)
 	ask := func() {
+		if send.Disabled() {
+			return // a previous question is still in flight
+		}
 		q := strings.TrimSpace(question.Text)
 		if q == "" {
 			return
