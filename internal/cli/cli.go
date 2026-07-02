@@ -202,7 +202,7 @@ func writeReport(
 
 Target: %s
 
-Status: M5 local retrieval Q&A. Model-based chat is not implemented.
+Status: deterministic offline analysis, with optional local LLM summaries and grounded --ask.
 
 ## 1. Project Summary
 

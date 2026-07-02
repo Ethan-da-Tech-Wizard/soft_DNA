@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -246,13 +247,9 @@ func TestExtractCPPSymbols(t *testing.T) {
 func names(items []Symbol) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		out = append(out, item.Kind+":"+item.Name+":"+item.File+":"+itoa(item.StartLine))
+		out = append(out, item.Kind+":"+item.Name+":"+item.File+":"+strconv.Itoa(item.StartLine))
 	}
 	return out
-}
-
-func itoa(value int) string {
-	return string(rune('0' + value))
 }
 
 // writeFixture writes src into a temp root and returns the root plus the

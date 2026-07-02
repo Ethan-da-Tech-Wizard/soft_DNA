@@ -111,9 +111,9 @@ func buildFromDB(db *sql.DB) (GroundingContext, error) {
 		SELECT path FROM files
 		WHERE path IN (
 			'main.go', 'main.py', 'app.py', 'main.rb', 'app.rb',
-			'main.r', 'run.r', 'main.swift', 'App.swift', 'main.c',
-			'main.cpp', 'main.cc', 'main.cxx', 'index.html',
-			'schema.sql', 'init.sql'
+			'main.r', 'run.r', 'main.R', 'run.R', 'main.swift',
+			'App.swift', 'main.c', 'main.cpp', 'main.cc', 'main.cxx',
+			'index.html', 'schema.sql', 'init.sql'
 		)
 		OR path LIKE 'cmd/%/main.go'
 		OR path LIKE 'src/main.%'
