@@ -40,7 +40,9 @@ func NewApp() *App {
 		fyneApp:  fyneapp.NewWithID("com.codelens.local"),
 		settings: LoadSettings(),
 	}
+	a.fyneApp.SetIcon(appIcon)
 	a.win = a.fyneApp.NewWindow("CodeLens Local")
+	a.win.SetIcon(appIcon)
 	a.win.Resize(fyne.NewSize(1100, 750))
 	a.win.SetContent(a.buildContent())
 	a.pathEntry.SetText(a.settings.LastProject)
@@ -141,7 +143,7 @@ func (a *App) runScan(root string) {
 		LLMBinary:   a.settings.LLMBinary,
 		LLMModel:    a.settings.LLMModel,
 		LLMThreads:  a.settings.LLMThreads,
-		LLMMaxFiles: 10,
+		LLMMaxFiles: a.settings.LLMMaxFiles,
 	}
 
 	res, err := cli.RunPipeline(opts, diagOut)

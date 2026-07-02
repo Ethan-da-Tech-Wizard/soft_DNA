@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 
@@ -10,6 +11,8 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -18,21 +21,21 @@ import (
 // directly from structured data rather than by parsing Markdown.
 func (a *App) buildReportTabs(res cli.PipelineResult) fyne.CanvasObject {
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Summary", newSummaryTab(res)),
+		container.NewTabItem("Summary", a.newSummaryTab(res)),
 		container.NewTabItem("Tech Stack", newTechStackTab(res)),
 		container.NewTabItem("Folders", newFoldersTab(res)),
 		container.NewTabItem("Entry Points", newEntryPointsTab(res)),
 		container.NewTabItem("Functions & Classes", newSymbolsTab(res.Symbols, "function", "method", "class", "type", "table", "view", "procedure")),
 		container.NewTabItem("Imports", newSymbolsTab(res.Symbols, "import")),
 		container.NewTabItem("AI Summaries", newAISummariesTab(res)),
-		container.NewTabItem("Diagram", newDiagramView(res.Stack, res.Folders, res.Entries)),
+		container.NewTabItem("Diagram", newDiagramTab(res.Stack, res.Folders, res.Entries)),
 		container.NewTabItem("Ask", a.newAskTab(res)),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 	return tabs
 }
 
-func newSummaryTab(res cli.PipelineResult) fyne.CanvasObject {
+func (a *App) newSummaryTab(res cli.PipelineResult) fyne.CanvasObject {
 	text := fmt.Sprintf(
 		"Scanned %d files.\nDetected stack: %s.\n\nIndex: %s\n  %d files, %d symbols, %d search rows.\n\nMarkdown report and diagram were also written to:\n  %s",
 		len(res.Files), res.Stack.Summary,
@@ -41,7 +44,24 @@ func newSummaryTab(res cli.PipelineResult) fyne.CanvasObject {
 	)
 	label := widget.NewLabel(text)
 	label.Wrapping = fyne.TextWrapWord
-	return container.NewVScroll(container.NewPadded(label))
+
+	openBtn := widget.NewButton("Open Output Folder", func() { a.openFolder(res.OutDir) })
+	content := container.NewVBox(label, container.NewHBox(openBtn))
+	return container.NewVScroll(container.NewPadded(content))
+}
+
+// openFolder asks the OS to open outDir in its default file manager — the
+// same "reveal in Finder/Explorer" action any desktop app offers, not a
+// network or subprocess operation.
+func (a *App) openFolder(outDir string) {
+	u, err := url.Parse(storage.NewFileURI(outDir).String())
+	if err != nil {
+		dialog.ShowError(err, a.win)
+		return
+	}
+	if err := a.fyneApp.OpenURL(u); err != nil {
+		dialog.ShowError(err, a.win)
+	}
 }
 
 func newTechStackTab(res cli.PipelineResult) fyne.CanvasObject {

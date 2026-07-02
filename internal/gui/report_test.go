@@ -128,8 +128,14 @@ func TestFilterSymbolsByNameAndFile(t *testing.T) {
 }
 
 func TestNewDiagramViewDoesNotPanicOnEmptyInputs(t *testing.T) {
-	if got := newDiagramView(stackdetect.Report{}, nil, nil); got == nil {
+	if got := newDiagramView(stackdetect.Report{}, nil, nil, 1.0); got == nil {
 		t.Fatal("newDiagramView returned nil")
+	}
+}
+
+func TestNewDiagramTabBuildsWithZoomControls(t *testing.T) {
+	if got := newDiagramTab(stackdetect.Report{}, nil, nil); got == nil {
+		t.Fatal("newDiagramTab returned nil")
 	}
 }
 

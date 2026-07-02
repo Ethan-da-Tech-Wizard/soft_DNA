@@ -17,10 +17,11 @@ import (
 // plain JSON under the OS user config directory (e.g. ~/.config/codelens on
 // Linux). No network call is ever made to load, save, or use these values.
 type Settings struct {
-	LLMEnabled bool   `json:"llm_enabled"`
-	LLMBinary  string `json:"llm_binary"`
-	LLMModel   string `json:"llm_model"`
-	LLMThreads int    `json:"llm_threads"`
+	LLMEnabled  bool   `json:"llm_enabled"`
+	LLMBinary   string `json:"llm_binary"`
+	LLMModel    string `json:"llm_model"`
+	LLMThreads  int    `json:"llm_threads"`
+	LLMMaxFiles int    `json:"llm_max_files"` // 0 = uncapped, matching --llm-max-files
 
 	// LastProject is the last folder scanned, restored into the path field
 	// on startup so reopening the app doesn't start from a blank slate.
@@ -43,7 +44,7 @@ func settingsPath() (string, error) {
 // missing or unreadable file is not an error; it yields sane defaults
 // (LLM disabled, thread count matching the machine).
 func LoadSettings() Settings {
-	defaults := Settings{LLMThreads: runtime.NumCPU()}
+	defaults := Settings{LLMThreads: runtime.NumCPU(), LLMMaxFiles: 10}
 
 	path, err := settingsPath()
 	if err != nil {
