@@ -20,18 +20,36 @@
 
 ---
 
-## Quick Start
+## Quick Start (Installation & Execution)
 
+Download the correct release package for your operating system from the [GitHub Releases](https://github.com/Ethan-da-Tech-Wizard/soft_DNA/releases) page.
+
+### 🐧 Linux
 ```sh
-# Install (one binary, no runtime deps)
+# Extract and run
 tar xzf codelens-v1.2.0-linux-amd64.tar.gz
 ./codelens ./my-project
-
-# Outputs:
-#   codelens-out/CODEBASE_REPORT.md   — full architecture report
-#   codelens-out/architecture.mmd     — Mermaid diagram
-#   codelens-out/codelens.db          — SQLite index
 ```
+
+### 🍎 macOS
+```sh
+# Extract and run (use arm64 for Apple Silicon, amd64 for Intel)
+tar xzf codelens-v1.2.0-darwin-arm64.tar.gz
+./codelens ./my-project
+```
+
+### 🪟 Windows
+1. Extract `codelens-v1.2.0-windows-amd64.zip`
+2. Open command prompt (`cmd`) or PowerShell, navigate to the folder, and run:
+```cmd
+codelens.exe C:\path\to\my-project
+```
+
+### Outputs
+Analysis writes the following to `./codelens-out/`:
+* `CODEBASE_REPORT.md` — full formatted architecture report
+* `architecture.mmd` — Mermaid diagram source
+* `codelens.db` — SQLite index database (cached for fast Q&A)
 
 ### Ask a question
 
