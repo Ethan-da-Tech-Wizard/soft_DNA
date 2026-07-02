@@ -41,18 +41,46 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (commit noted)
       `dialog.ShowInformation` listing specific problems (settings are
       still saved — this warns, it doesn't block). Verified: enabling LLM
       with empty paths produced a dialog naming both missing paths.
-- [ ] **No way to jump to the on-disk output** — after a scan, the Markdown
-      report/diagram/DB are written to `<project>/codelens-out/` but
-      there's no button in the window to reveal that folder for someone who
-      wants to copy/share those files.
-- [ ] **Default window/taskbar icon is Fyne's generic icon**, not something
-      identifying CodeLens.
-- [ ] **Diagram tab has no zoom/fit control** — a project with many folders
-      and entry points produces a wide canvas with only scrollbars to
-      navigate it.
-- [ ] **Table columns are fixed-width and not sortable by header click** —
-      long file paths or signatures get truncated with no way to widen a
-      column or re-sort by it.
+- [x] **No way to jump to the on-disk output** — added an "Open Output
+      Folder" button on the Summary tab, calling `fyne.App.OpenURL` on a
+      `file://` URI for `res.OutDir` (delegates to the OS's default file
+      manager — xdg-open/Explorer/Finder — not a bundled subprocess).
+      Verified: button renders under the summary text.
+- [x] **Default window/taskbar icon is Fyne's generic icon** — generated a
+      small flat geometric mark (dark rounded square, accent-blue inset,
+      matching the app's existing primary color) procedurally in Go
+      (`internal/gui/assets/gen_icon.go`, `//go:build ignore`, kept in-repo
+      for reproducibility), embedded via `//go:embed`, wired into both
+      `fyne.App.SetIcon` and `Window.SetIcon`. Regression test decodes the
+      embedded PNG and checks it's square and non-trivially sized.
+- [x] **Diagram tab has no zoom/fit control** — added Zoom In/Out/Reset
+      buttons; `newDiagramView` takes a scale factor and the tab rebuilds
+      the canvas at the new scale (Fyne has no built-in transform for
+      arbitrary containers, so redrawing at scale is the simplest correct
+      option). Verified: two clicks on Zoom In visibly enlarged every box,
+      line, and label proportionally.
+- [x] **Table columns are not sortable by header click** — clicking a
+      header cell now sorts all rows by that column (string comparison,
+      case-sensitive — e.g. "App" sorts before "main" since uppercase
+      precedes lowercase in ASCII; acceptable for a first pass, noted here
+      rather than silently glossed over), toggling ascending/descending on
+      repeat clicks, with a ▲/▼ marker on the active column. Verified via
+      screenshot before/after clicking "Name" on a multi-symbol fixture.
+      **Column drag-resizing was scoped out**: it needs a custom Table
+      renderer/drag handler in Fyne, a materially bigger lift than the
+      per-column-type fixed widths already in place (140/360px by content
+      type) justify for a "polish" item — not implemented.
+
+## CLI / GUI parity
+
+- [x] **GUI hardcoded `LLMMaxFiles: 10`** with no way to change it, while
+      the CLI exposes `--llm-max-files` (including `0` = uncapped per the
+      v1.2 diagnostics-gate work). Added `LLMMaxFiles` to `Settings`
+      (defaults to 10 for a new install, an explicit 0 is preserved across
+      save/load as "uncapped"), a "Max files to annotate" field in the
+      Settings dialog, and wired it into `runScan`'s `PipelineOptions`
+      instead of the hardcoded literal. Verified: dialog shows the field
+      pre-filled with 10.
 
 ## CLI / shared pipeline
 
@@ -64,8 +92,21 @@ Legend: `[ ]` not started · `[~]` in progress · `[x]` done (commit noted)
 
 _(one line per landed bit, newest first)_
 
+- Batch 3: fixed the CLI/GUI `--llm-max-files` parity gap found while
+  re-reading `app.go` for this batch — proof the "keep finding things"
+  half of this checklist works, not just the "keep fixing things" half.
+- Batch 2: open-output-folder button, a real app icon (generated, not a
+  placeholder), diagram zoom in/out/reset, sortable table columns (header
+  click, ▲/▼ indicator; drag-resize explicitly scoped out as not worth a
+  custom Table renderer for a polish item). All four manually verified on a
+  virtual display; `internal/gui` still fully green, headless.
 - Batch 1: log auto-scroll, Enter-to-scan, Ask double-submit guard,
   remembered last project path, scan progress indicator, Settings LLM-config
   validation warning. All six manually verified end to end on a virtual
   display plus new/updated unit tests (`internal/gui` still fully green,
-  headless). 6 of 10 GUI items done; 0 of 0 CLI items queued so far.
+  headless).
+
+**Status: all 10 originally-found GUI items done, plus 1 CLI/GUI parity gap
+found and fixed along the way. Nothing currently queued — next pass would
+need a fresh look at the app (or a real-world project run through it) to
+find more.**

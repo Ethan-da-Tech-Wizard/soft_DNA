@@ -12,7 +12,7 @@ func TestSettingsSaveAndLoadRoundTrip(t *testing.T) {
 	configDir = func() (string, error) { return dir, nil }
 	defer func() { configDir = orig }()
 
-	want := Settings{LLMEnabled: true, LLMBinary: "/bin/llama-cli", LLMModel: "/models/m.gguf", LLMThreads: 4, LastProject: "/home/user/myproject"}
+	want := Settings{LLMEnabled: true, LLMBinary: "/bin/llama-cli", LLMModel: "/models/m.gguf", LLMThreads: 4, LLMMaxFiles: 25, LastProject: "/home/user/myproject"}
 	if err := want.Save(); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
@@ -94,5 +94,29 @@ func TestValidateLLMConfigPassesWithRealFiles(t *testing.T) {
 	got := validateLLMConfig(Settings{LLMEnabled: true, LLMBinary: binPath, LLMModel: modelPath})
 	if len(got) != 0 {
 		t.Fatalf("validateLLMConfig(real files) = %v, want none", got)
+	}
+}
+
+func TestLoadSettingsDefaultsMaxFilesTenWhenMissing(t *testing.T) {
+	orig := configDir
+	configDir = func() (string, error) { return t.TempDir(), nil }
+	defer func() { configDir = orig }()
+
+	if got := LoadSettings().LLMMaxFiles; got != 10 {
+		t.Fatalf("LLMMaxFiles default = %d, want 10", got)
+	}
+}
+
+func TestLoadSettingsPreservesExplicitZeroMaxFiles(t *testing.T) {
+	dir := t.TempDir()
+	orig := configDir
+	configDir = func() (string, error) { return dir, nil }
+	defer func() { configDir = orig }()
+
+	if err := (Settings{LLMMaxFiles: 0}).Save(); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadSettings().LLMMaxFiles; got != 0 {
+		t.Fatalf("LLMMaxFiles = %d, want 0 (uncapped) to survive an explicit save", got)
 	}
 }
