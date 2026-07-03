@@ -36,9 +36,12 @@ const (
 	diagramVGap  = float32(70)
 )
 
-// ComputeDiagramLayout lays out one root node fanning out to a row of folder
+// ComputeDiagramLayout lays out one root node fanning out to a grid of folder
 // and entry-point boxes plus a "Detected Stack" box, which itself fans out
 // to a row of technology boxes — mirroring diagram.WriteMermaid's structure.
+//
+// Layer 1 is wrapped into rows of at most 5 columns so it remains readable
+// on medium displays, and the root is centered horizontally above them.
 func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint) DiagramLayout {
 	const rootID = "root"
 	const stackID = "stack"
@@ -63,8 +66,27 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		layer1 = append(layer1, DiagramNode{ID: stackID, Label: "Detected Stack"})
 		layout.Edges = append(layout.Edges, DiagramEdge{From: rootID, To: stackID})
 	}
-	placeRow(layer1, diagramVGap+diagramNodeH)
+
+	const maxCols = 5
+	rowY := diagramVGap + diagramNodeH
+	var lastRowIndex int
+	for i := range layer1 {
+		col := i % maxCols
+		row := i / maxCols
+		layer1[i].X = float32(col) * (diagramNodeW + diagramHGap)
+		layer1[i].Y = rowY + float32(row)*(diagramNodeH+diagramVGap)
+		layer1[i].W = diagramNodeW
+		layer1[i].H = diagramNodeH
+		lastRowIndex = row
+	}
 	layout.Nodes = append(layout.Nodes, layer1...)
+
+	var layer2Y float32
+	if len(layer1) > 0 {
+		layer2Y = rowY + float32(lastRowIndex)*(diagramNodeH+diagramVGap) + diagramNodeH + diagramVGap
+	} else {
+		layer2Y = rowY + diagramNodeH + diagramVGap
+	}
 
 	var layer2 []DiagramNode
 	for i, tech := range stack.Tech {
@@ -72,13 +94,24 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		layer2 = append(layer2, DiagramNode{ID: id, Label: tech.Name})
 		layout.Edges = append(layout.Edges, DiagramEdge{From: stackID, To: id})
 	}
-	placeRow(layer2, 2*(diagramVGap+diagramNodeH))
+	for i := range layer2 {
+		layer2[i].X = float32(i) * (diagramNodeW + diagramHGap)
+		layer2[i].Y = layer2Y
+		layer2[i].W = diagramNodeW
+		layer2[i].H = diagramNodeH
+	}
 	layout.Nodes = append(layout.Nodes, layer2...)
 
-	if len(layer1) > 0 {
-		centerX := (layer1[0].X + layer1[len(layer1)-1].X + diagramNodeW) / 2
-		layout.Nodes[0].X = centerX - diagramNodeW/2
+	maxColsInLayer1 := maxCols
+	if len(layer1) < maxCols {
+		maxColsInLayer1 = len(layer1)
 	}
+	if maxColsInLayer1 == 0 {
+		maxColsInLayer1 = 1
+	}
+	gridWidth := float32(maxColsInLayer1)*diagramNodeW + float32(maxColsInLayer1-1)*diagramHGap
+	layout.Nodes[0].X = (gridWidth - diagramNodeW) / 2
+	layout.Nodes[0].Y = 0
 
 	for _, n := range layout.Nodes {
 		if right := n.X + n.W; right > layout.Width {
@@ -89,13 +122,4 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		}
 	}
 	return layout
-}
-
-func placeRow(nodes []DiagramNode, y float32) {
-	for i := range nodes {
-		nodes[i].X = float32(i) * (diagramNodeW + diagramHGap)
-		nodes[i].Y = y
-		nodes[i].W = diagramNodeW
-		nodes[i].H = diagramNodeH
-	}
 }

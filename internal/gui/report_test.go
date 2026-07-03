@@ -152,10 +152,12 @@ func TestNewAskTabBuildsWithoutWindow(t *testing.T) {
 	}
 }
 
-// walkLabels collects the text of every *widget.Label reachable from obj.
+// walkLabels collects the text of every *widget.Label and *widget.Button reachable from obj.
 func walkLabels(obj fyne.CanvasObject, out *[]string) {
 	switch v := obj.(type) {
 	case *widget.Label:
+		*out = append(*out, v.Text)
+	case *widget.Button:
 		*out = append(*out, v.Text)
 	case *fyne.Container:
 		for _, child := range v.Objects {
@@ -180,7 +182,7 @@ func labelsContain(obj fyne.CanvasObject, want string) bool {
 func TestAISummariesTabExplainsSkippedPass(t *testing.T) {
 	// User enabled AI, but the pass never ran (e.g. missing binary):
 	// the tab must show the pipeline's warning, not a generic "off" message.
-	a := &App{settings: Settings{LLMEnabled: true}}
+	a := &App{settings: Settings{LLMEnabled: true, LLMModel: "model.gguf", LLMBinary: "llama-cli"}}
 	res := samplePipelineResult()
 	res.Warnings = []string{"--llm is enabled but the LLM binary or model path is missing; skipping LLM pass"}
 
@@ -193,7 +195,7 @@ func TestAISummariesTabExplainsSkippedPass(t *testing.T) {
 func TestAISummariesTabExplainsTimeouts(t *testing.T) {
 	// The pass ran but every call timed out: the tab must say so and point
 	// at the timeout setting, using the tallies from the diagnostic stream.
-	a := &App{settings: Settings{LLMEnabled: true}, scanTimeouts: 11, scanFailedTurns: 11}
+	a := &App{settings: Settings{LLMEnabled: true, LLMModel: "model.gguf", LLMBinary: "llama-cli"}, scanTimeouts: 11, scanFailedTurns: 11}
 	res := samplePipelineResult()
 	res.LLM = cli.LLMResult{Enabled: true, Stalled: []string{"main.go"}}
 
@@ -204,12 +206,53 @@ func TestAISummariesTabExplainsTimeouts(t *testing.T) {
 }
 
 func TestAISummariesTabExplainsValidationFailures(t *testing.T) {
-	a := &App{settings: Settings{LLMEnabled: true}, scanFailedTurns: 4}
+	a := &App{settings: Settings{LLMEnabled: true, LLMModel: "model.gguf", LLMBinary: "llama-cli"}, scanFailedTurns: 4}
 	res := samplePipelineResult()
 	res.LLM = cli.LLMResult{Enabled: true}
 
 	tab := a.newAISummariesTab(res)
 	if !labelsContain(tab, "4 model turn(s) failed validation") {
 		t.Fatalf("validation-failure tab does not explain itself")
+	}
+}
+
+func TestAppLoggingRingBuffer(t *testing.T) {
+	a := &App{
+		logView:   widget.NewLabel(""),
+		logScroll: container.NewVScroll(widget.NewLabel("")),
+	}
+
+	// Append 500 lines
+	for i := 0; i < 500; i++ {
+		a.appendLog("line")
+	}
+	if len(a.logLines) != 500 {
+		t.Fatalf("len(logLines) = %d, want 500", len(a.logLines))
+	}
+	if strings.Contains(a.logView.Text, "earlier lines omitted") {
+		t.Fatalf("first 500 lines should not say 'earlier lines omitted'")
+	}
+
+	// Append 1 more line (should trigger truncation note)
+	a.appendLog("lastLine")
+	if len(a.logLines) != 500 {
+		t.Fatalf("len(logLines) after overflow = %d, want 500", len(a.logLines))
+	}
+	if !strings.HasPrefix(a.logView.Text, "… earlier lines omitted") {
+		t.Fatalf("overflow should prepend earlier lines omitted, got: %q", a.logView.Text)
+	}
+	if !strings.Contains(a.logView.Text, "lastLine") {
+		t.Fatalf("log should contain lastLine")
+	}
+}
+
+func TestNewAISummariesTabFirstRunCard(t *testing.T) {
+	// If LLMModel is empty, the tab must render the first-run Setup AI card
+	a := &App{settings: Settings{LLMModel: ""}}
+	res := samplePipelineResult()
+
+	tab := a.newAISummariesTab(res)
+	if !labelsContain(tab, "Local AI Summaries") || !labelsContain(tab, "Download Recommended Model") {
+		t.Fatalf("unconfigured tab does not render the Setup AI card")
 	}
 }

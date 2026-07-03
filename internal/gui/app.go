@@ -37,6 +37,7 @@ type App struct {
 	// AI Summaries tab to explain an empty result instead of shrugging.
 	scanTimeouts    int // lines mentioning a timed-out model call
 	scanFailedTurns int // [LLM Loop] turns with Health = 0
+	logLines        []string
 }
 
 // NewApp builds the application and its main window, loading any previously
@@ -104,10 +105,12 @@ func (a *App) buildContent() fyne.CanvasObject {
 }
 
 func (a *App) appendLog(line string) {
-	if a.logView.Text != "" {
-		a.logView.SetText(a.logView.Text + "\n" + line)
+	a.logLines = append(a.logLines, line)
+	if len(a.logLines) > 500 {
+		a.logLines = a.logLines[len(a.logLines)-500:]
+		a.logView.SetText("… earlier lines omitted\n" + strings.Join(a.logLines, "\n"))
 	} else {
-		a.logView.SetText(line)
+		a.logView.SetText(strings.Join(a.logLines, "\n"))
 	}
 	a.logScroll.ScrollToBottom()
 }
@@ -121,6 +124,7 @@ func (a *App) startScan() {
 
 	a.scanBtn.Disable()
 	a.logView.SetText("")
+	a.logLines = nil
 	a.scanTimeouts = 0
 	a.scanFailedTurns = 0
 	a.scanProgress = widget.NewProgressBarInfinite()

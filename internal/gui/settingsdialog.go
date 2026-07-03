@@ -31,7 +31,7 @@ func (a *App) showSettingsDialog() {
 		}, a.win)
 	})
 
-	modelEntry := widget.NewEntry()
+	modelEntry := widget.NewSelectEntry(ScanLocalModels())
 	modelEntry.SetText(a.settings.LLMModel)
 	modelBrowse := widget.NewButton("Browse…", func() {
 		dialog.ShowFileOpen(func(r fyne.URIReadCloser, err error) {

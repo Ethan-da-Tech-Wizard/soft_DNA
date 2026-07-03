@@ -8,8 +8,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -53,18 +55,24 @@ func LoadSettings() Settings {
 
 	path, err := settingsPath()
 	if err != nil {
+		defaults.LLMBinary = autoDetectLlamaCli()
 		return defaults
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		defaults.LLMBinary = autoDetectLlamaCli()
 		return defaults
 	}
 	var s Settings
 	if err := json.Unmarshal(data, &s); err != nil {
+		defaults.LLMBinary = autoDetectLlamaCli()
 		return defaults
 	}
 	if s.LLMThreads <= 0 {
 		s.LLMThreads = defaults.LLMThreads
+	}
+	if s.LLMBinary == "" {
+		s.LLMBinary = autoDetectLlamaCli()
 	}
 	return s
 }
@@ -129,4 +137,82 @@ func (s Settings) Save() error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+func autoDetectLlamaCli() string {
+	var binName string
+	if runtime.GOOS == "windows" {
+		binName = "llama-cli.exe"
+	} else {
+		binName = "llama-cli"
+	}
+
+	// 1. Next to the executable
+	if exePath, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exePath)
+		candidate := filepath.Join(dir, binName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// 2. ~/.codelens/bin/llama-cli
+	if home, err := os.UserHomeDir(); err == nil {
+		candidate := filepath.Join(home, ".codelens", "bin", binName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+
+	// 3. In $PATH
+	if p, err := exec.LookPath("llama-cli"); err == nil {
+		return p
+	}
+
+	return ""
+}
+
+// ScanLocalModels searches ~/.codelens/models and ~/Downloads for GGUF files,
+// sorted by modification time (newest first).
+func ScanLocalModels() []string {
+	var candidates []string
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	dirs := []string{
+		filepath.Join(home, ".codelens", "models"),
+		filepath.Join(home, "Downloads"),
+	}
+
+	type fileInfo struct {
+		path  string
+		mtime time.Time
+	}
+	var found []fileInfo
+
+	for _, dir := range dirs {
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if !f.IsDir() && strings.HasSuffix(strings.ToLower(f.Name()), ".gguf") {
+				path := filepath.Join(dir, f.Name())
+				if info, err := f.Info(); err == nil {
+					found = append(found, fileInfo{path: path, mtime: info.ModTime()})
+				}
+			}
+		}
+	}
+
+	sort.Slice(found, func(i, j int) bool {
+		return found[i].mtime.After(found[j].mtime)
+	})
+
+	for _, fi := range found {
+		candidates = append(candidates, fi.path)
+	}
+	return candidates
 }
