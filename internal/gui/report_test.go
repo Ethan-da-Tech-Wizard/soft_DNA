@@ -2,6 +2,7 @@ package gui
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"codelens-local/internal/cli"
@@ -11,8 +12,10 @@ import (
 	"codelens-local/internal/symbols"
 	"codelens-local/internal/validate"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
+	"fyne.io/fyne/v2/widget"
 )
 
 // TestMain installs Fyne's headless test driver once for the whole package,
@@ -80,7 +83,7 @@ func TestBuildReportTabsHandlesEmptyResult(t *testing.T) {
 
 func TestNewAISummariesTabDisabledShowsPlaceholder(t *testing.T) {
 	res := samplePipelineResult() // LLM zero-value: Enabled=false
-	if got := newAISummariesTab(res); got == nil {
+	if got := (&App{}).newAISummariesTab(res); got == nil {
 		t.Fatal("newAISummariesTab returned nil")
 	}
 }
@@ -98,7 +101,7 @@ func TestNewAISummariesTabRendersOverviewAndFiles(t *testing.T) {
 		},
 		Stalled: []string{"broken.go"},
 	}
-	if got := newAISummariesTab(res); got == nil {
+	if got := (&App{}).newAISummariesTab(res); got == nil {
 		t.Fatal("newAISummariesTab returned nil")
 	}
 }
@@ -146,5 +149,67 @@ func TestNewAskTabBuildsWithoutWindow(t *testing.T) {
 	a := &App{}
 	if got := a.newAskTab(samplePipelineResult()); got == nil {
 		t.Fatal("newAskTab returned nil")
+	}
+}
+
+// walkLabels collects the text of every *widget.Label reachable from obj.
+func walkLabels(obj fyne.CanvasObject, out *[]string) {
+	switch v := obj.(type) {
+	case *widget.Label:
+		*out = append(*out, v.Text)
+	case *fyne.Container:
+		for _, child := range v.Objects {
+			walkLabels(child, out)
+		}
+	case *container.Scroll:
+		walkLabels(v.Content, out)
+	}
+}
+
+func labelsContain(obj fyne.CanvasObject, want string) bool {
+	var texts []string
+	walkLabels(obj, &texts)
+	for _, txt := range texts {
+		if strings.Contains(txt, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAISummariesTabExplainsSkippedPass(t *testing.T) {
+	// User enabled AI, but the pass never ran (e.g. missing binary):
+	// the tab must show the pipeline's warning, not a generic "off" message.
+	a := &App{settings: Settings{LLMEnabled: true}}
+	res := samplePipelineResult()
+	res.Warnings = []string{"--llm is enabled but the LLM binary or model path is missing; skipping LLM pass"}
+
+	tab := a.newAISummariesTab(res)
+	if !labelsContain(tab, "did not run") || !labelsContain(tab, "binary or model path is missing") {
+		t.Fatalf("skipped-pass tab does not surface the pipeline warning")
+	}
+}
+
+func TestAISummariesTabExplainsTimeouts(t *testing.T) {
+	// The pass ran but every call timed out: the tab must say so and point
+	// at the timeout setting, using the tallies from the diagnostic stream.
+	a := &App{settings: Settings{LLMEnabled: true}, scanTimeouts: 11, scanFailedTurns: 11}
+	res := samplePipelineResult()
+	res.LLM = cli.LLMResult{Enabled: true, Stalled: []string{"main.go"}}
+
+	tab := a.newAISummariesTab(res)
+	if !labelsContain(tab, "11 model call(s) timed out") || !labelsContain(tab, "Timeout per call") {
+		t.Fatalf("timeout tab does not explain the timeout failure")
+	}
+}
+
+func TestAISummariesTabExplainsValidationFailures(t *testing.T) {
+	a := &App{settings: Settings{LLMEnabled: true}, scanFailedTurns: 4}
+	res := samplePipelineResult()
+	res.LLM = cli.LLMResult{Enabled: true}
+
+	tab := a.newAISummariesTab(res)
+	if !labelsContain(tab, "4 model turn(s) failed validation") {
+		t.Fatalf("validation-failure tab does not explain itself")
 	}
 }
