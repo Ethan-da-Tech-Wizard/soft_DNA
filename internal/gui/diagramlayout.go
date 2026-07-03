@@ -1,8 +1,12 @@
 package gui
 
 import (
+	"path/filepath"
+	"sort"
 	"strconv"
+	"strings"
 
+	"codelens-local/internal/scanner"
 	"codelens-local/internal/stackdetect"
 	"codelens-local/internal/structure"
 )
@@ -122,4 +126,119 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		}
 	}
 	return layout
+}
+
+// ComputeDiagramLayoutForScope computes the diagram layout for either the
+// root/top-level view (scope == "") or a drilled-down view scoped to a specific
+// folder (scope != "").
+func ComputeDiagramLayoutForScope(files []scanner.FileInfo, stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint, scope string) DiagramLayout {
+	if scope == "" {
+		return ComputeDiagramLayout(stack, folders, entries)
+	}
+
+	parentID := "folder_" + scope
+	layout := DiagramLayout{
+		Nodes: []DiagramNode{{ID: parentID, Label: filepath.Base(scope), W: diagramNodeW, H: diagramNodeH}},
+	}
+
+	subfolders, immediateFiles := GetFolderContents(files, scope)
+
+	var children []DiagramNode
+	for _, sf := range subfolders {
+		fullPath := filepath.ToSlash(filepath.Join(scope, sf))
+		id := "folder_" + fullPath
+		layout.Edges = append(layout.Edges, DiagramEdge{From: parentID, To: id})
+		children = append(children, DiagramNode{ID: id, Label: sf, W: diagramNodeW, H: diagramNodeH})
+	}
+	for _, f := range immediateFiles {
+		fullPath := filepath.ToSlash(filepath.Join(scope, f))
+		id := "file_" + fullPath
+		layout.Edges = append(layout.Edges, DiagramEdge{From: parentID, To: id})
+		children = append(children, DiagramNode{ID: id, Label: f, W: diagramNodeW, H: diagramNodeH})
+	}
+
+	if len(children) == 0 {
+		id := "empty_placeholder"
+		layout.Edges = append(layout.Edges, DiagramEdge{From: parentID, To: id})
+		children = append(children, DiagramNode{ID: id, Label: "(Empty folder)", W: diagramNodeW, H: diagramNodeH})
+	}
+
+	const maxCols = 5
+	rowY := diagramVGap + diagramNodeH
+	for i := range children {
+		col := i % maxCols
+		row := i / maxCols
+		children[i].X = float32(col) * (diagramNodeW + diagramHGap)
+		children[i].Y = rowY + float32(row)*(diagramNodeH+diagramVGap)
+		children[i].W = diagramNodeW
+		children[i].H = diagramNodeH
+	}
+	layout.Nodes = append(layout.Nodes, children...)
+
+	maxColsInLayer1 := maxCols
+	if len(children) < maxCols {
+		maxColsInLayer1 = len(children)
+	}
+	if maxColsInLayer1 == 0 {
+		maxColsInLayer1 = 1
+	}
+	gridWidth := float32(maxColsInLayer1)*diagramNodeW + float32(maxColsInLayer1-1)*diagramHGap
+	layout.Nodes[0].X = (gridWidth - diagramNodeW) / 2
+	layout.Nodes[0].Y = 0
+
+	for _, n := range layout.Nodes {
+		if right := n.X + n.W; right > layout.Width {
+			layout.Width = right
+		}
+		if bottom := n.Y + n.H; bottom > layout.Height {
+			layout.Height = bottom
+		}
+	}
+	return layout
+}
+
+// GetFolderContents finds all immediate subfolders and files inside parentPath
+// (which is relative to the project root, e.g. "", "app", "app/core").
+func GetFolderContents(files []scanner.FileInfo, parentPath string) ([]string, []string) {
+	subfolders := make(map[string]bool)
+	var immediateFiles []string
+
+	parentPath = filepath.ToSlash(filepath.Clean(parentPath))
+	if parentPath == "." || parentPath == "/" {
+		parentPath = ""
+	}
+
+	for _, file := range files {
+		if file.Skipped {
+			continue
+		}
+		path := filepath.ToSlash(filepath.Clean(file.Path))
+		if parentPath == "" {
+			dir := filepath.Dir(path)
+			if dir == "." {
+				immediateFiles = append(immediateFiles, filepath.Base(path))
+			} else {
+				parts := strings.Split(path, "/")
+				subfolders[parts[0]] = true
+			}
+		} else {
+			if strings.HasPrefix(path, parentPath+"/") {
+				rel := path[len(parentPath)+1:]
+				parts := strings.Split(rel, "/")
+				if len(parts) == 1 {
+					immediateFiles = append(immediateFiles, parts[0])
+				} else {
+					subfolders[parts[0]] = true
+				}
+			}
+		}
+	}
+
+	var folderList []string
+	for sf := range subfolders {
+		folderList = append(folderList, sf)
+	}
+	sort.Strings(folderList)
+	sort.Strings(immediateFiles)
+	return folderList, immediateFiles
 }

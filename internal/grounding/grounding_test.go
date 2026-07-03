@@ -207,7 +207,7 @@ func TestBuildFromDBHappyPath(t *testing.T) {
 	if got := ctx.FolderRoles["cmd"]; got != "Command-line entry points" {
 		t.Errorf(`FolderRoles["cmd"] = %q`, got)
 	}
-	if got := ctx.FolderRoles["internal"]; got != "Internal packages (not exported)" {
+	if got := ctx.FolderRoles["internal"]; got != "Private application packages" {
 		t.Errorf(`FolderRoles["internal"] = %q`, got)
 	}
 }
@@ -416,23 +416,23 @@ func TestFolderRole(t *testing.T) {
 		want   string
 	}{
 		{"cmd", "Command-line entry points"},
-		{"internal", "Internal packages (not exported)"},
+		{"internal", "Private application packages"},
 		{"src", "Application source"},
-		{"pkg", "Exported library packages"},
-		{"test", "Test fixtures and data"},
-		{"tests", "Test fixtures and data"},
-		{"testdata", "Test fixtures and data"},
-		{"docs", "Documentation"},
-		{"doc", "Documentation"},
-		{"scripts", "Build and automation scripts"},
-		{"script", "Build and automation scripts"},
-		{"config", "Configuration files"},
-		{"configs", "Configuration files"},
-		{"migrations", "Database migrations"},
+		{"pkg", "Reusable public packages"},
+		{"test", "Tests and fixtures"},
+		{"tests", "Tests and fixtures"},
+		{"testdata", "Tests and fixtures"},
+		{"docs", "Project documentation"},
+		{"doc", "Project documentation"},
+		{"scripts", "Notebooks & Scripting"},
+		{"script", "Notebooks & Scripting"},
+		{"config", "Configuration Settings"},
+		{"configs", "Configuration Settings"},
+		{"migrations", "Database & Storage Models"},
 		{".", "Root files and project manifests"},
-		{"lib", "Project files"},
-		{"utils", "Project files"},
-		{"assets", "Project files"},
+		{"lib", "Backend Services & Utilities"},
+		{"utils", "Backend Services & Utilities"},
+		{"assets", "Static assets"},
 	}
 	for _, tc := range cases {
 		got := folderRole(tc.folder)

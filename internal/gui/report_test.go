@@ -131,13 +131,13 @@ func TestFilterSymbolsByNameAndFile(t *testing.T) {
 }
 
 func TestNewDiagramViewDoesNotPanicOnEmptyInputs(t *testing.T) {
-	if got := newDiagramView(stackdetect.Report{}, nil, nil, 1.0); got == nil {
+	if got := newDiagramView(nil, stackdetect.Report{}, nil, nil, 1.0, "", func(string) {}); got == nil {
 		t.Fatal("newDiagramView returned nil")
 	}
 }
 
 func TestNewDiagramTabBuildsWithZoomControls(t *testing.T) {
-	if got := newDiagramTab(stackdetect.Report{}, nil, nil); got == nil {
+	if got := newDiagramTab(nil, stackdetect.Report{}, nil, nil); got == nil {
 		t.Fatal("newDiagramTab returned nil")
 	}
 }
@@ -254,5 +254,77 @@ func TestNewAISummariesTabFirstRunCard(t *testing.T) {
 	tab := a.newAISummariesTab(res)
 	if !labelsContain(tab, "Local AI Summaries") || !labelsContain(tab, "Download Recommended Model") {
 		t.Fatalf("unconfigured tab does not render the Setup AI card")
+	}
+}
+
+func TestDiagramInteractiveNavigationAndColors(t *testing.T) {
+	// 1. Check roleColor mappings
+	if col := roleColor("root"); col != colorRoot {
+		t.Errorf("roleColor(root) = %v, want %v", col, colorRoot)
+	}
+	if col := roleColor("folder_tests"); col != colorTest {
+		t.Errorf("roleColor(folder_tests) = %v, want %v", col, colorTest)
+	}
+	if col := roleColor("folder_src"); col != colorSource {
+		t.Errorf("roleColor(folder_src) = %v, want %v", col, colorSource)
+	}
+	if col := roleColor("folder_models"); col != colorData {
+		t.Errorf("roleColor(folder_models) = %v, want %v", col, colorData)
+	}
+	if col := roleColor("folder_configs"); col != colorConfig {
+		t.Errorf("roleColor(folder_configs) = %v, want %v", col, colorConfig)
+	}
+
+	// 2. Check tab building and interactions
+	files := []scanner.FileInfo{
+		{Path: "main.go", Language: "Go"},
+		{Path: "app/core.go", Language: "Go"},
+		{Path: "app/helper/helper.go", Language: "Go"},
+	}
+	folders := []structure.Folder{
+		{Path: "app", Role: "Application source"},
+	}
+
+	var clickedScope string
+	viewObj := newDiagramView(files, stackdetect.Report{}, folders, nil, 1.0, "", func(scope string) {
+		clickedScope = scope
+	})
+
+	if viewObj == nil {
+		t.Fatal("newDiagramView returned nil")
+	}
+
+	scroll, ok := viewObj.(*container.Scroll)
+	if !ok {
+		t.Fatalf("newDiagramView should return a *container.Scroll")
+	}
+	canvasArea, ok := scroll.Content.(*fyne.Container)
+	if !ok {
+		t.Fatalf("Scroll content should be a *fyne.Container")
+	}
+
+	var appWidget *DiagramNodeWidget
+	for _, child := range canvasArea.Objects {
+		if w, ok := child.(*DiagramNodeWidget); ok {
+			if w.node.ID == "folder_app" {
+				appWidget = w
+				break
+			}
+		}
+	}
+
+	if appWidget == nil {
+		t.Fatalf("could not find folder_app DiagramNodeWidget in view")
+	}
+
+	appWidget.Tapped(&fyne.PointEvent{})
+	if clickedScope != "app" {
+		t.Fatalf("clicking folder_app node did not trigger scope update to 'app', got: %q", clickedScope)
+	}
+
+	// 3. Test that tab renders and can be fitted
+	tab := newDiagramTab(files, stackdetect.Report{}, folders, nil)
+	if tab == nil {
+		t.Fatal("newDiagramTab returned nil")
 	}
 }

@@ -3,6 +3,7 @@ package gui
 import (
 	"testing"
 
+	"codelens-local/internal/scanner"
 	"codelens-local/internal/stackdetect"
 	"codelens-local/internal/structure"
 )
@@ -102,5 +103,47 @@ func TestComputeDiagramLayoutWrapping(t *testing.T) {
 	expectedRootX := (gridWidth - diagramNodeW) / 2
 	if root.X != expectedRootX {
 		t.Errorf("Root X = %v, want %v", root.X, expectedRootX)
+	}
+}
+
+func TestComputeDiagramLayoutForScope(t *testing.T) {
+	files := []scanner.FileInfo{
+		{Path: "main.go"},
+		{Path: "app/core.go"},
+		{Path: "app/helper/helper.go"},
+	}
+
+	// 1. Root scope (empty string)
+	layoutRoot := ComputeDiagramLayoutForScope(files, stackdetect.Report{}, nil, nil, "")
+	if len(layoutRoot.Nodes) != 1 || layoutRoot.Nodes[0].ID != "root" {
+		t.Fatalf("Root scope layout should fallback to top-level layout: %+v", layoutRoot.Nodes)
+	}
+
+	// 2. Drilled-down scope ("app")
+	layoutApp := ComputeDiagramLayoutForScope(files, stackdetect.Report{}, nil, nil, "app")
+	// Expected:
+	// Parent node: folder_app
+	// Children: folder_app/helper, file_app/core.go
+	if len(layoutApp.Nodes) != 3 {
+		t.Fatalf("len(Nodes) = %d, want 3: %+v", len(layoutApp.Nodes), layoutApp.Nodes)
+	}
+
+	hasHelper := false
+	hasCore := false
+	for _, n := range layoutApp.Nodes {
+		if n.ID == "folder_app/helper" {
+			hasHelper = true
+		}
+		if n.ID == "file_app/core.go" {
+			hasCore = true
+		}
+	}
+	if !hasHelper || !hasCore {
+		t.Fatalf("missing expected children in drilled-down layout: %+v", layoutApp.Nodes)
+	}
+
+	// 3. Edges
+	if len(layoutApp.Edges) != 2 {
+		t.Fatalf("len(Edges) = %d, want 2: %+v", len(layoutApp.Edges), layoutApp.Edges)
 	}
 }
