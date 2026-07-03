@@ -144,6 +144,7 @@ func (a *App) runScan(root string) {
 		LLMModel:    a.settings.LLMModel,
 		LLMThreads:  a.settings.LLMThreads,
 		LLMMaxFiles: a.settings.LLMMaxFiles,
+		LLMTimeout:  a.settings.EffectiveLLMTimeout(),
 	}
 
 	res, err := cli.RunPipeline(opts, diagOut)
