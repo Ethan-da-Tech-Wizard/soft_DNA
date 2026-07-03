@@ -446,3 +446,38 @@ func BenchmarkExtractAll(b *testing.B) {
 		_ = ExtractAll(root, largeFileList)
 	}
 }
+
+func TestIncrementalRescanHashes(t *testing.T) {
+	root := filepath.Join("..", "..", "testdata", "sample_go")
+	files, err := scanner.Scan(root, scanner.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	allSyms := ExtractAll(root, files)
+	if len(allSyms) == 0 {
+		t.Fatal("expected symbols in sample_go")
+	}
+
+	cachedHashes := map[string]string{
+		files[0].Path: files[0].ContentHash,
+	}
+	cachedSymbols := map[string][]Symbol{
+		files[0].Path: {
+			{Name: "CachedSymbol", Kind: "function", File: files[0].Path, StartLine: 42},
+		},
+	}
+
+	incSyms := ExtractAllIncremental(root, files, cachedHashes, cachedSymbols)
+
+	foundCached := false
+	for _, sym := range incSyms {
+		if sym.Name == "CachedSymbol" {
+			foundCached = true
+			break
+		}
+	}
+	if !foundCached {
+		t.Errorf("expected cached symbol to be reused, got: %+v", incSyms)
+	}
+}

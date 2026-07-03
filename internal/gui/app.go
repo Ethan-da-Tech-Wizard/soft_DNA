@@ -1,11 +1,15 @@
 package gui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"codelens-local/internal/cli"
 	"codelens-local/internal/symbols"
+
+	"github.com/fsnotify/fsnotify"
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
@@ -44,6 +48,10 @@ type App struct {
 	funcRows      [][]string
 	importSymbols []symbols.Symbol
 	importRows    [][]string
+
+	watchCheck *widget.Check
+	watcher    *fsnotify.Watcher
+	watchDone  chan struct{}
 }
 
 // NewApp builds the application and its main window, loading any previously
@@ -83,12 +91,16 @@ func (a *App) buildContent() fyne.CanvasObject {
 
 	a.scanBtn = widget.NewButton("Scan", a.startScan)
 
+	a.watchCheck = widget.NewCheck("Watch", func(checked bool) {
+		a.updateWatcherState()
+	})
+
 	settingsBtn := widget.NewButton("Settings", func() {
 		a.showSettingsDialog()
 	})
 
 	top := container.NewBorder(nil, nil,
-		widget.NewLabel("Project:"), container.NewHBox(browseBtn, a.scanBtn, settingsBtn),
+		widget.NewLabel("Project:"), container.NewHBox(browseBtn, a.scanBtn, a.watchCheck, settingsBtn),
 		a.pathEntry,
 	)
 
@@ -168,9 +180,10 @@ func (a *App) runScan(root string) {
 		LLMEnabled:  a.settings.LLMEnabled,
 		LLMBinary:   a.settings.LLMBinary,
 		LLMModel:    a.settings.LLMModel,
-		LLMThreads:  a.settings.LLMThreads,
-		LLMMaxFiles: a.settings.LLMMaxFiles,
-		LLMTimeout:  a.settings.EffectiveLLMTimeout(),
+		LLMThreads:         a.settings.LLMThreads,
+		LLMMaxFiles:        a.settings.LLMMaxFiles,
+		LLMTimeout:         a.settings.EffectiveLLMTimeout(),
+		LLMAnnotationModel: a.settings.LLMAnnotationModel,
 	}
 
 	res, err := cli.RunPipeline(opts, diagOut)
@@ -178,6 +191,7 @@ func (a *App) runScan(root string) {
 	if err == nil {
 		a.funcSymbols, a.funcRows = prepareSymbolRows(res.Symbols, []string{"function", "method", "class", "type", "table", "view", "procedure"})
 		a.importSymbols, a.importRows = prepareSymbolRows(res.Symbols, []string{"import"})
+		a.updateWatcherState()
 	}
 
 	fyne.Do(func() {
@@ -205,3 +219,82 @@ func (a *App) runScan(root string) {
 		a.results.Refresh()
 	})
 }
+
+func (a *App) updateWatcherState() {
+	if a.watcher != nil {
+		_ = a.watcher.Close()
+		a.watcher = nil
+	}
+	if a.watchDone != nil {
+		close(a.watchDone)
+		a.watchDone = nil
+	}
+
+	if a.watchCheck == nil || !a.watchCheck.Checked {
+		return
+	}
+
+	root := strings.TrimSpace(a.pathEntry.Text)
+	if root == "" {
+		return
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		a.appendLog("watcher error: " + err.Error())
+		return
+	}
+	a.watcher = watcher
+	a.watchDone = make(chan struct{})
+
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".git" || name == "node_modules" || name == "codelens-out" || name == ".mypy_cache" || name == ".pytest_cache" || name == ".ruff_cache" {
+				return filepath.SkipDir
+			}
+			_ = watcher.Add(path)
+		}
+		return nil
+	})
+
+	go func(done chan struct{}) {
+		var timer *time.Timer
+		const debounceDur = 500 * time.Millisecond
+
+		for {
+			select {
+			case <-done:
+				if timer != nil {
+					timer.Stop()
+				}
+				return
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
+					ext := filepath.Ext(event.Name)
+					switch ext {
+					case ".go", ".py", ".js", ".ts", ".rb", ".r", ".swift", ".sql", ".rs", ".c", ".cpp", ".h":
+						if timer != nil {
+							timer.Stop()
+						}
+						timer = time.AfterFunc(debounceDur, func() {
+							fyne.Do(func() {
+								if !a.scanBtn.Disabled() {
+									a.startScan()
+								}
+							})
+						})
+					}
+				}
+			case <-watcher.Errors:
+			}
+		}
+	}(a.watchDone)
+}
+

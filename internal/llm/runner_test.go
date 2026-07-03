@@ -187,3 +187,21 @@ func TestWriteGrammar(t *testing.T) {
 		t.Errorf("temp grammar file contents do not look right:\n%s", string(content))
 	}
 }
+
+func TestStreamingAskParser(t *testing.T) {
+	input := `{"answer": "Hello \"World\"\nLine 2"}`
+	state := 0
+	keyBuf := ""
+	escaped := false
+
+	var tokens []string
+	parseAnswerStream([]byte(input), &state, &keyBuf, &escaped, func(token string) {
+		tokens = append(tokens, token)
+	})
+
+	got := strings.Join(tokens, "")
+	want := "Hello \"World\"\nLine 2"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

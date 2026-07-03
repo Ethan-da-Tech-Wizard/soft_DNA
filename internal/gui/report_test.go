@@ -139,7 +139,8 @@ func TestNewDiagramViewDoesNotPanicOnEmptyInputs(t *testing.T) {
 }
 
 func TestNewDiagramTabBuildsWithZoomControls(t *testing.T) {
-	if got := newDiagramTab(nil, stackdetect.Report{}, nil, nil); got == nil {
+	a := &App{pathEntry: widget.NewEntry(), watchCheck: widget.NewCheck("Watch", nil)}
+	if got := a.newDiagramTab(cli.PipelineResult{}, nil, stackdetect.Report{}, nil, nil); got == nil {
 		t.Fatal("newDiagramTab returned nil")
 	}
 }
@@ -325,7 +326,8 @@ func TestDiagramInteractiveNavigationAndColors(t *testing.T) {
 	}
 
 	// 3. Test that tab renders and can be fitted
-	tab := newDiagramTab(files, stackdetect.Report{}, folders, nil)
+	a := &App{pathEntry: widget.NewEntry(), watchCheck: widget.NewCheck("Watch", nil)}
+	tab := a.newDiagramTab(cli.PipelineResult{}, files, stackdetect.Report{}, folders, nil)
 	if tab == nil {
 		t.Fatal("newDiagramTab returned nil")
 	}
@@ -356,5 +358,30 @@ func TestSettingsGPULayersAndModelWarning(t *testing.T) {
 	timeout := s.EffectiveLLMTimeout()
 	if timeout != 420*time.Second {
 		t.Errorf("EffectiveLLMTimeout() for 5GB model = %v, want 420s", timeout)
+	}
+}
+
+func TestAppWatcherLifecycle(t *testing.T) {
+	a := &App{
+		pathEntry:  widget.NewEntry(),
+		watchCheck: widget.NewCheck("Watch", nil),
+	}
+
+	if a.watcher != nil {
+		t.Fatal("watcher should be nil initially")
+	}
+
+	a.pathEntry.SetText(t.TempDir())
+	a.watchCheck.SetChecked(true)
+	a.updateWatcherState()
+
+	if a.watcher == nil {
+		t.Fatal("watcher should be initialized after checking Watch check")
+	}
+
+	a.watchCheck.SetChecked(false)
+	a.updateWatcherState()
+	if a.watcher != nil {
+		t.Fatal("watcher should be cleaned up after unchecking Watch check")
 	}
 }

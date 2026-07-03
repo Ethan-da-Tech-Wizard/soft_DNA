@@ -45,6 +45,19 @@ func (a *App) showSettingsDialog() {
 		}, a.win)
 	})
 
+	annoModelEntry := widget.NewSelectEntry(ScanLocalModels())
+	annoModelEntry.SetText(a.settings.LLMAnnotationModel)
+	annoModelEntry.SetPlaceHolder("optional (falls back to primary)")
+	annoModelBrowse := widget.NewButton("Browse…", func() {
+		dialog.ShowFileOpen(func(r fyne.URIReadCloser, err error) {
+			if err != nil || r == nil {
+				return
+			}
+			defer r.Close()
+			annoModelEntry.SetText(r.URI().Path())
+		}, a.win)
+	})
+
 	threadsEntry := widget.NewEntry()
 	threadsEntry.SetText(strconv.Itoa(a.settings.LLMThreads))
 
@@ -115,7 +128,8 @@ func (a *App) showSettingsDialog() {
 	form := widget.NewForm(
 		widget.NewFormItem("", enabled),
 		widget.NewFormItem("llama-cli binary", container.NewBorder(nil, nil, nil, binaryBrowse, binaryEntry)),
-		widget.NewFormItem("GGUF model file", container.NewBorder(nil, nil, nil, modelBrowse, modelEntry)),
+		widget.NewFormItem("Chat / overview model", container.NewBorder(nil, nil, nil, modelBrowse, modelEntry)),
+		widget.NewFormItem("Annotation model (fast)", container.NewBorder(nil, nil, nil, annoModelBrowse, annoModelEntry)),
 		widget.NewFormItem("", modelHint),
 		widget.NewFormItem("CPU threads", threadsEntry),
 		widget.NewFormItem("GPU layers (-ngl)", gpuLayersEntry),
@@ -149,14 +163,15 @@ func (a *App) showSettingsDialog() {
 			gpuLayers = a.settings.LLMGPULayers
 		}
 		a.settings = Settings{
-			LLMEnabled:    enabled.Checked,
-			LLMBinary:     binaryEntry.Text,
-			LLMModel:      modelEntry.Text,
-			LLMThreads:    threads,
-			LLMMaxFiles:   maxFiles,
-			LLMTimeoutSec: timeoutSec,
-			LLMGPULayers:  gpuLayers,
-			LastProject:   a.settings.LastProject,
+			LLMEnabled:         enabled.Checked,
+			LLMBinary:          binaryEntry.Text,
+			LLMModel:           modelEntry.Text,
+			LLMAnnotationModel: strings.TrimSpace(annoModelEntry.Text),
+			LLMThreads:         threads,
+			LLMMaxFiles:        maxFiles,
+			LLMTimeoutSec:      timeoutSec,
+			LLMGPULayers:       gpuLayers,
+			LastProject:        a.settings.LastProject,
 		}
 		if err := a.settings.Save(); err != nil {
 			dialog.ShowError(err, a.win)
@@ -167,6 +182,6 @@ func (a *App) showSettingsDialog() {
 				a.win)
 		}
 	}, a.win)
-	d.Resize(fyne.NewSize(520, 340))
+	d.Resize(fyne.NewSize(520, 380))
 	d.Show()
 }
