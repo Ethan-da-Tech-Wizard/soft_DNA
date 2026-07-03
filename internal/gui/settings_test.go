@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestSettingsSaveAndLoadRoundTrip(t *testing.T) {
@@ -118,5 +119,49 @@ func TestLoadSettingsPreservesExplicitZeroMaxFiles(t *testing.T) {
 	}
 	if got := LoadSettings().LLMMaxFiles; got != 0 {
 		t.Fatalf("LLMMaxFiles = %d, want 0 (uncapped) to survive an explicit save", got)
+	}
+}
+
+func TestEffectiveLLMTimeoutExplicitSettingWins(t *testing.T) {
+	s := Settings{LLMTimeoutSec: 55}
+	if got := s.EffectiveLLMTimeout(); got != 55*time.Second {
+		t.Fatalf("EffectiveLLMTimeout = %v, want 55s", got)
+	}
+}
+
+func TestEffectiveLLMTimeoutSmallOrMissingModel(t *testing.T) {
+	// Missing model file: fall back to the small-model default.
+	s := Settings{LLMModel: "/no/such/model.gguf"}
+	if got := s.EffectiveLLMTimeout(); got != 120*time.Second {
+		t.Fatalf("EffectiveLLMTimeout(missing) = %v, want 120s", got)
+	}
+
+	// Real but small model file: also the small-model default.
+	small := filepath.Join(t.TempDir(), "small.gguf")
+	if err := os.WriteFile(small, []byte("tiny"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s = Settings{LLMModel: small}
+	if got := s.EffectiveLLMTimeout(); got != 120*time.Second {
+		t.Fatalf("EffectiveLLMTimeout(small) = %v, want 120s", got)
+	}
+}
+
+func TestEffectiveLLMTimeoutLargeModelGetsMinutes(t *testing.T) {
+	// A sparse file of 3 GiB: no real disk usage, but Stat reports the size.
+	big := filepath.Join(t.TempDir(), "qwen7b.gguf")
+	f, err := os.Create(big)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(largeModelBytes); err != nil {
+		f.Close()
+		t.Skipf("filesystem does not support sparse truncate: %v", err)
+	}
+	f.Close()
+
+	s := Settings{LLMModel: big}
+	if got := s.EffectiveLLMTimeout(); got != 420*time.Second {
+		t.Fatalf("EffectiveLLMTimeout(7B-sized) = %v, want 420s", got)
 	}
 }
