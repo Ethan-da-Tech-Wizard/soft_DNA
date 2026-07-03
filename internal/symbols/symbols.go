@@ -10,8 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"codelens-local/internal/scanner"
 )
@@ -83,12 +85,51 @@ func joinUnclosed(lines []string, i int) (string, int) {
 	return strings.Join(strings.Fields(joined), " "), j
 }
 
-// ExtractAll extracts symbols for supported files.
+// ExtractAll extracts symbols for supported files in parallel using a worker pool.
 func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
-	var out []Symbol
-	for _, file := range files {
-		out = append(out, Extract(root, file)...)
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 1 {
+		numWorkers = 1
 	}
+
+	type task struct {
+		file  scanner.FileInfo
+		index int
+	}
+
+	type result struct {
+		symbols []Symbol
+		index   int
+	}
+
+	tasks := make(chan task, len(files))
+	results := make(chan result, len(files))
+
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range tasks {
+				syms := Extract(root, t.file)
+				results <- result{symbols: syms, index: t.index}
+			}
+		}()
+	}
+
+	for i, f := range files {
+		tasks <- task{file: f, index: i}
+	}
+	close(tasks)
+
+	wg.Wait()
+	close(results)
+
+	var out []Symbol
+	for res := range results {
+		out = append(out, res.symbols...)
+	}
+
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
 			return out[i].File < out[j].File

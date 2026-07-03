@@ -53,6 +53,7 @@ type Config struct {
 	Temperature    float64       // sampling temperature passed to --temp
 	Timeout        time.Duration // wall-clock limit for the subprocess; 0 = no timeout
 	MaxOutputBytes int64         // byte ceiling on stdout; enforces G-7 resource cap
+	GPULayers      int           // GPU layers passed to --gpu-layers / -ngl; 0 = default (no offload)
 }
 
 // limitedWriter is an io.Writer that accumulates bytes up to a fixed ceiling.
@@ -104,6 +105,9 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 	args = append(args, "--model", cfg.ModelPath)
 	if cfg.GrammarPath != "" {
 		args = append(args, "--grammar-file", cfg.GrammarPath)
+	}
+	if cfg.GPULayers > 0 {
+		args = append(args, "--gpu-layers", strconv.Itoa(cfg.GPULayers))
 	}
 	args = append(args,
 		"--threads", strconv.Itoa(cfg.Threads),

@@ -144,7 +144,7 @@ auto-download anything without an explicit click.
 to the binary, a fresh install reaches a working AI scan with zero path
 fields typed.
 
-## T5 — Per-task model guidance (small now, big later)
+## T5 — Per-task model guidance (small now, big later) ✅ DONE
 
 **Do (now):** when the selected model file is ≥4 GB, show one Settings
 hint: "Large model: great for Ask/overview, slow for per-file
@@ -259,7 +259,7 @@ and note the truncation in-line ("… earlier lines omitted"). File:
 `internal/gui/app.go`. Accept: a synthetic 5,000-line append stays
 under a second and holds only the tail.
 
-## T12 — Parallel symbol extraction
+## T12 — Parallel symbol extraction ✅ DONE
 
 `symbols.ExtractAll` walks files serially; it's pure CPU and the output
 is sorted afterward anyway, so a worker pool (NumCPU) is safe and
@@ -267,7 +267,7 @@ deterministic. File: `internal/symbols/symbols.go`. Accept: existing
 tests unchanged (they assert sorted output), plus a benchmark in
 `symbols_test.go` showing the speedup; `go test -race` clean.
 
-## T13 — Build report rows off the UI thread
+## T13 — Build report rows off the UI thread ✅ DONE
 
 `buildReportTabs` runs inside `fyne.Do` — thousands of symbol rows are
 formatted on the render thread, freezing the window at scan end. Prepare
@@ -276,7 +276,7 @@ in `fyne.Do`. File: `internal/gui/app.go`/`report.go`. Accept: no
 behavior change (existing headless tab tests still pass); window stays
 responsive at scan-complete on a large repo.
 
-## T14 — Live scan counters instead of a silent bar
+## T14 — Live scan counters instead of a silent bar ✅ DONE
 
 Extend the pipeline's diagnostics writer usage: log one line per N=200
 files scanned and one when indexing starts, so big scans show heartbeat
