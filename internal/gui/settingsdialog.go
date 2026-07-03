@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"codelens-local/internal/cli"
 	"strconv"
 	"strings"
 
@@ -55,6 +56,38 @@ func (a *App) showSettingsDialog() {
 	}
 	timeoutEntry.SetPlaceHolder("auto (by model size)")
 
+	// Test model: one tiny inference against the paths currently typed in
+	// this dialog (not the saved settings), so problems surface in seconds
+	// instead of after an hours-long scan.
+	testStatus := widget.NewLabel("")
+	testStatus.Wrapping = fyne.TextWrapWord
+	var testBtn *widget.Button
+	testBtn = widget.NewButton("Test model", func() {
+		threads, err := strconv.Atoi(threadsEntry.Text)
+		if err != nil || threads <= 0 {
+			threads = a.settings.LLMThreads
+		}
+		trial := Settings{LLMModel: modelEntry.Text}
+		if v, err := strconv.Atoi(strings.TrimSpace(timeoutEntry.Text)); err == nil && v > 0 {
+			trial.LLMTimeoutSec = v
+		}
+		binary, model, timeout := binaryEntry.Text, modelEntry.Text, trial.EffectiveLLMTimeout()
+
+		testBtn.Disable()
+		testStatus.SetText("Testing… (a large model can take a minute or two to load)")
+		go func() {
+			msg, err := cli.TestModel(binary, model, threads, timeout)
+			fyne.Do(func() {
+				testBtn.Enable()
+				if err != nil {
+					testStatus.SetText("Failed: " + err.Error())
+					return
+				}
+				testStatus.SetText(msg)
+			})
+		}()
+	})
+
 	form := widget.NewForm(
 		widget.NewFormItem("", enabled),
 		widget.NewFormItem("llama-cli binary", container.NewBorder(nil, nil, nil, binaryBrowse, binaryEntry)),
@@ -62,6 +95,7 @@ func (a *App) showSettingsDialog() {
 		widget.NewFormItem("CPU threads", threadsEntry),
 		widget.NewFormItem("Max files to annotate", maxFilesEntry),
 		widget.NewFormItem("Timeout per call (sec)", timeoutEntry),
+		widget.NewFormItem("", container.NewVBox(container.NewHBox(testBtn), testStatus)),
 	)
 
 	d := dialog.NewCustomConfirm("Settings", "Save", "Cancel", form, func(ok bool) {
