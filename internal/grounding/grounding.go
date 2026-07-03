@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"codelens-local/internal/structure"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -164,28 +166,5 @@ func buildFromDB(db *sql.DB) (GroundingContext, error) {
 
 // folderRole maps a top-level directory name to a human-readable role description.
 func folderRole(folder string) string {
-	switch folder {
-	case "cmd":
-		return "Command-line entry points"
-	case "internal":
-		return "Internal packages (not exported)"
-	case "src":
-		return "Application source"
-	case "pkg":
-		return "Exported library packages"
-	case "test", "tests", "testdata":
-		return "Test fixtures and data"
-	case "docs", "doc":
-		return "Documentation"
-	case "scripts", "script":
-		return "Build and automation scripts"
-	case "config", "configs":
-		return "Configuration files"
-	case "migrations":
-		return "Database migrations"
-	case ".":
-		return "Root files and project manifests"
-	default:
-		return "Project files"
-	}
+	return structure.RoleFor(folder)
 }

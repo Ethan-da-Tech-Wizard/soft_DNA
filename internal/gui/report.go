@@ -34,7 +34,7 @@ func (a *App) buildReportTabs(res cli.PipelineResult) fyne.CanvasObject {
 		container.NewTabItem("Functions & Classes", newSymbolsTab(res.Symbols, "function", "method", "class", "type", "table", "view", "procedure")),
 		container.NewTabItem("Imports", newSymbolsTab(res.Symbols, "import")),
 		container.NewTabItem("AI Summaries", a.newAISummariesTab(res)),
-		container.NewTabItem("Diagram", newDiagramTab(res.Stack, res.Folders, res.Entries)),
+		container.NewTabItem("Diagram", newDiagramTab(res.Files, res.Stack, res.Folders, res.Entries)),
 		container.NewTabItem("Ask", a.newAskTab(res)),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)

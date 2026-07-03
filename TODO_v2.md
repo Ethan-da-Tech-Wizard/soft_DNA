@@ -201,7 +201,7 @@ the KISS answer and its layout is unit-testable to the pixel.
 **Accept when:** layout tests assert 12 folders produce 3 rows of ≤5,
 root X within the first row's span, and total width ≤ N·(nodeW+gap).
 
-## T8 — Clickable nodes: drill down one level at a time
+## T8 — Clickable nodes: drill down one level at a time ✅ DONE
 
 **Files:** `internal/gui/diagramview.go`, new tiny tappable-node widget,
 `internal/gui/diagramlayout.go` for the sub-level layout, tests.
@@ -220,7 +220,7 @@ whole point.
 **Accept when:** Xvfb run shows: click `app` → subfolder/file boxes +
 breadcrumb; Back returns; empty folders render a placeholder not a crash.
 
-## T9 — Roles worth reading + color coding
+## T9 — Roles worth reading + color coding ✅ DONE
 
 **Files:** `internal/structure/structure.go` (`roleFor`),
 `internal/grounding/grounding.go` (`folderRole` — keep the two in sync,
@@ -237,7 +237,7 @@ one-line legend under the zoom bar.
 **Accept when:** the real-project diagram shows ≤30% "Project files"
 where today it shows ~90%, and colors match the legend.
 
-## T10 — Fit-to-window button
+## T10 — Fit-to-window button ✅ DONE
 
 **Files:** `internal/gui/diagramview.go`.
 

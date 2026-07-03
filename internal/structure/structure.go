@@ -43,7 +43,7 @@ func folders(files []scanner.FileInfo) []Folder {
 	for folder, count := range counts {
 		out = append(out, Folder{
 			Path:      folder,
-			Role:      roleFor(folder),
+			Role:      RoleFor(folder),
 			FileCount: count,
 		})
 	}
@@ -62,24 +62,39 @@ func topFolder(path string) string {
 	return parts[0]
 }
 
-func roleFor(folder string) string {
-	switch folder {
+// RoleFor returns a friendly description of a folder's likely purpose.
+func RoleFor(folder string) string {
+	switch strings.ToLower(folder) {
 	case ".":
 		return "Root files and project manifests"
-	case "cmd":
+	case "cmd", "bin":
 		return "Command-line entry points"
 	case "internal":
 		return "Private application packages"
 	case "pkg":
 		return "Reusable public packages"
-	case "src":
+	case "src", "source", "app", "core":
 		return "Application source"
-	case "testdata", "tests", "__tests__":
+	case "testdata", "tests", "__tests__", "test", "spec", "specs":
 		return "Tests and fixtures"
-	case "docs", "files":
+	case "docs", "files", "doc":
 		return "Project documentation"
-	case "public", "static":
+	case "public", "static", "assets", "images", "media", "styles", "css", "js":
 		return "Static assets"
+	case "api", "controllers", "routes", "handlers", "server":
+		return "API & Network Handlers"
+	case "models", "db", "migrations", "database", "store", "repository":
+		return "Database & Storage Models"
+	case "configs", "config", "settings", "env":
+		return "Configuration Settings"
+	case "web", "frontend", "components", "views", "templates", "pages":
+		return "User Interface & Frontend"
+	case "backend", "services", "utils", "helpers", "lib", "tools":
+		return "Backend Services & Utilities"
+	case "notebooks", "notebook", "scripts", "script":
+		return "Notebooks & Scripting"
+	case ".github", ".gitlab", "ci", "workflows":
+		return "CI/CD & Workflows"
 	default:
 		return "Project files"
 	}
