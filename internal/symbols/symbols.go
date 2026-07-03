@@ -145,6 +145,73 @@ func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
 	return out
 }
 
+// ExtractAllIncremental extracts symbols in parallel, reusing cachedSymbols if ContentHash matches cachedHashes.
+func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes map[string]string, cachedSymbols map[string][]Symbol) []Symbol {
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
+
+	type task struct {
+		file  scanner.FileInfo
+		index int
+	}
+
+	type result struct {
+		symbols []Symbol
+		index   int
+	}
+
+	tasks := make(chan task, len(files))
+	results := make(chan result, len(files))
+
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for t := range tasks {
+				if cachedHash, ok := cachedHashes[t.file.Path]; ok && cachedHash == t.file.ContentHash {
+					if syms, ok := cachedSymbols[t.file.Path]; ok {
+						results <- result{symbols: syms, index: t.index}
+						continue
+					}
+				}
+				syms := Extract(root, t.file)
+				results <- result{symbols: syms, index: t.index}
+			}
+		}()
+	}
+
+	for i, f := range files {
+		tasks <- task{file: f, index: i}
+	}
+	close(tasks)
+
+	wg.Wait()
+	close(results)
+
+	var out []Symbol
+	for res := range results {
+		out = append(out, res.symbols...)
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].File != out[j].File {
+			return out[i].File < out[j].File
+		}
+		if out[i].StartLine != out[j].StartLine {
+			return out[i].StartLine < out[j].StartLine
+		}
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+
 // Extract extracts symbols from one file. Unsupported or unreadable files return no symbols.
 func Extract(root string, file scanner.FileInfo) []Symbol {
 	if file.Skipped || file.IsBinary {

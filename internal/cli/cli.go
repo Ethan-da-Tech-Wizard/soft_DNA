@@ -3,6 +3,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -157,13 +158,14 @@ type PipelineOptions struct {
 	MaxFileSize int64
 	Ignore      []string
 
-	LLMEnabled   bool
-	LLMBinary    string
-	LLMModel     string
-	LLMThreads   int
-	LLMTimeout   time.Duration
-	LLMMaxFiles  int
-	LLMGPULayers int
+	LLMEnabled         bool
+	LLMBinary          string
+	LLMModel           string
+	LLMThreads         int
+	LLMTimeout         time.Duration
+	LLMMaxFiles        int
+	LLMGPULayers       int
+	LLMAnnotationModel string
 }
 
 // PipelineResult bundles every artifact RunPipeline produces: the raw
@@ -232,9 +234,41 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		fmt.Fprintf(diagOut, "[Scanner] Scanned %d files...\n", i)
 	}
 
+	var cache PipelineResult
+	hasCache := false
+	cachePath := filepath.Join(outDir, "report.json")
+	if data, cerr := os.ReadFile(cachePath); cerr == nil {
+		if jerr := json.Unmarshal(data, &cache); jerr == nil {
+			hasCache = true
+		}
+	}
+
+	cachedHashes := make(map[string]string)
+	cachedSymbols := make(map[string][]symbols.Symbol)
+	cachedSummaries := make(map[string]validate.FileExplanation)
+
+	if hasCache {
+		for _, f := range cache.Files {
+			cachedHashes[f.Path] = f.ContentHash
+		}
+		for _, sym := range cache.Symbols {
+			cachedSymbols[sym.File] = append(cachedSymbols[sym.File], sym)
+		}
+		if cache.LLM.Enabled {
+			for f, explanation := range cache.LLM.FileSummaries {
+				cachedSummaries[f] = explanation
+			}
+		}
+	}
+
 	stack := stackdetect.Detect(files, opts.Root)
 	folders, entries := structure.Analyze(files)
-	symbolList := symbols.ExtractAll(opts.Root, files)
+	var symbolList []symbols.Symbol
+	if hasCache {
+		symbolList = symbols.ExtractAllIncremental(opts.Root, files, cachedHashes, cachedSymbols)
+	} else {
+		symbolList = symbols.ExtractAll(opts.Root, files)
+	}
 
 	fmt.Fprintf(diagOut, "[Index] Indexing project files...\n")
 	stats, err := buildIndex(opts.Root, outDir, files, symbolList)
@@ -266,13 +300,17 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 				timeout = 60 * time.Second
 			}
 			dbPath := filepath.Join(outDir, dbName)
-			llmRes, llmErr := runLLMPipeline(opts.Root, dbPath, opts.LLMBinary, opts.LLMModel, threads, opts.LLMMaxFiles, timeout, opts.LLMGPULayers, files, diagOut)
+			llmRes, llmErr := runLLMPipeline(opts.Root, dbPath, opts.LLMBinary, opts.LLMModel, opts.LLMAnnotationModel, threads, opts.LLMMaxFiles, timeout, opts.LLMGPULayers, files, diagOut, cachedHashes, cachedSummaries)
 			if llmErr != nil {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("LLM pass failed: %v; continuing with deterministic report", llmErr))
 			} else {
 				res.LLM = llmRes
 			}
 		}
+	}
+
+	if data, jerr := json.Marshal(res); jerr == nil {
+		_ = os.WriteFile(filepath.Join(outDir, "report.json"), data, 0o644)
 	}
 
 	return res, nil
@@ -294,12 +332,13 @@ type AnswerOptions struct {
 	Question string
 	Entries  []structure.EntryPoint
 
-	LLMEnabled   bool
-	LLMBinary    string
-	LLMModel     string
-	LLMThreads   int
-	LLMTimeout   time.Duration
-	LLMGPULayers int
+	LLMEnabled    bool
+	LLMBinary     string
+	LLMModel      string
+	LLMThreads    int
+	LLMTimeout    time.Duration
+	LLMGPULayers  int
+	TokenCallback func(string)
 }
 
 // AnswerResult holds the outcome of Answer: the FTS citations, and — when an
@@ -331,7 +370,7 @@ func Answer(opts AnswerOptions) (AnswerResult, error) {
 		if timeout <= 0 {
 			timeout = 60 * time.Second
 		}
-		answer, aErr := answerWithLLM(opts.Root, opts.Question, hits, opts.LLMBinary, opts.LLMModel, threads, timeout, opts.LLMGPULayers)
+		answer, aErr := answerWithLLM(opts.Root, opts.Question, hits, opts.LLMBinary, opts.LLMModel, threads, timeout, opts.LLMGPULayers, opts.TokenCallback)
 		if aErr != nil {
 			res.LLMWarning = fmt.Sprintf("grounded LLM answer failed: %v; falling back to FTS citations", aErr)
 		} else {
@@ -628,7 +667,7 @@ const (
 // answerWithLLM produces a grounded plain-English answer to question using
 // bounded snippets from the FTS hit files and one local LLM call. Any failure
 // returns an error so the caller can fall back to FTS-only citations.
-func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, modelPath string, threads int, timeout time.Duration, gpuLayers int) (string, error) {
+func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, modelPath string, threads int, timeout time.Duration, gpuLayers int, tokenCallback func(string)) (string, error) {
 	if len(hits) == 0 {
 		return "", errors.New("no indexed matches to ground an answer")
 	}
@@ -685,6 +724,7 @@ func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, mo
 		Timeout:        timeout,
 		MaxOutputBytes: 8192,
 		GPULayers:      gpuLayers,
+		TokenCallback:  tokenCallback,
 	}
 	raw, err := llmRun(context.Background(), cfg, prompt)
 	if err != nil {
@@ -970,7 +1010,10 @@ const maxLLMSymbols = 5
 // post-validation. diagOut receives the [LLM Loop] diagnostic lines and any
 // warnings from this pass — the CLI passes its stderr, the GUI passes a
 // callback-backed writer that streams into a log widget.
-func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, gpuLayers int, files []scanner.FileInfo, diagOut io.Writer) (LLMResult, error) {
+func runLLMPipeline(root, dbPath, binaryPath, modelPath, annotationModelPath string, threads, maxFiles int, timeout time.Duration, gpuLayers int, files []scanner.FileInfo, diagOut io.Writer, cachedHashes map[string]string, cachedSummaries map[string]validate.FileExplanation) (LLMResult, error) {
+	if annotationModelPath == "" {
+		annotationModelPath = modelPath
+	}
 	gCtx, err := grounding.Build(dbPath)
 	if err != nil {
 		return LLMResult{}, fmt.Errorf("grounding build: %w", err)
@@ -1002,7 +1045,19 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 		fileList = fileList[:maxFiles]
 	}
 
-	diag := llm.NewLoopState(1+len(fileList), diagOut)
+	var filesToAnnotate []string
+	for _, f := range fileList {
+		info := infoMap[f]
+		if cachedHash, ok := cachedHashes[f]; ok && cachedHash == info.ContentHash {
+			if explanation, ok := cachedSummaries[f]; ok {
+				res.FileSummaries[f] = explanation
+				continue
+			}
+		}
+		filesToAnnotate = append(filesToAnnotate, f)
+	}
+
+	diag := llm.NewLoopState(1+len(filesToAnnotate), diagOut)
 
 	// 1. Project Overview Summarization (Segment 0)
 	projPrompt, err := grounding.FormatProjectOverviewPrompt(gCtx)
@@ -1064,13 +1119,13 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 	}
 
 	// 2. Per-File Summarization (Segments 1 to N)
-	if len(fileList) > 0 {
+	if len(filesToAnnotate) > 0 {
 		fileGrammar, fileCleanup, gErr := llm.WriteGrammar("file_explain.gbnf")
 		if gErr == nil {
 			defer fileCleanup()
 			cfg := llm.Config{
 				BinaryPath:     binaryPath,
-				ModelPath:      modelPath,
+				ModelPath:      annotationModelPath,
 				GrammarPath:    fileGrammar,
 				Threads:        threads,
 				MaxTokens:      512,
@@ -1079,7 +1134,11 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				MaxOutputBytes: 8192,
 				GPULayers:      gpuLayers,
 			}
-			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, diagOut)
+			newSummaries, stalled := summarizeFiles(root, filesToAnnotate, infoMap, fileSymbols, cfg, diag, diagOut)
+			for k, v := range newSummaries {
+				res.FileSummaries[k] = v
+			}
+			res.Stalled = stalled
 		} else {
 			fmt.Fprintf(diagOut, "warning: LLM file explain grammar write failed: %v\n", gErr)
 		}
@@ -1213,7 +1272,6 @@ func summarizeFiles(
 			if runErr != nil {
 				fmt.Fprintf(warnOut, "warning: LLM file explain run failed for %s: %v\n", f, runErr)
 			} else {
-				// Build list of expected/allowed symbol names in this file for validation
 				var allowedNames []string
 				for _, s := range syms {
 					allowedNames = append(allowedNames, s.Name)

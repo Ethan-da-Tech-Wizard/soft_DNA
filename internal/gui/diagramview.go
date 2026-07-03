@@ -1,10 +1,12 @@
 package gui
 
 import (
+	"fmt"
 	"image/color"
 	"path/filepath"
 	"strings"
 
+	"codelens-local/internal/cli"
 	"codelens-local/internal/scanner"
 	"codelens-local/internal/stackdetect"
 	"codelens-local/internal/structure"
@@ -12,6 +14,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -33,7 +36,7 @@ var (
 
 // newDiagramTab wraps the diagram canvas with Zoom In / Zoom Out / Reset / Fit
 // controls, color role legends, and folder drill-down navigation headers.
-func newDiagramTab(files []scanner.FileInfo, stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint) fyne.CanvasObject {
+func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint) fyne.CanvasObject {
 	scale := float32(1.0)
 	currentScope := ""
 
@@ -73,6 +76,54 @@ func newDiagramTab(files []scanner.FileInfo, stack stackdetect.Report, folders [
 		navBar.Refresh()
 	}
 
+	explainFolderBtn := widget.NewButton("Explain Folder", nil)
+	explainFolderBtn.OnTapped = func() {
+		scope := currentScope
+		if scope == "" {
+			scope = "the project root"
+		}
+		question := fmt.Sprintf("Explain the purpose and responsibilities of the %s folder or package.", scope)
+		explainFolderBtn.Disable()
+		go func() {
+			ans, err := cli.Answer(cli.AnswerOptions{
+				Root:         res.Root,
+				OutDir:       res.OutDir,
+				Question:     question,
+				Entries:      res.Entries,
+				LLMEnabled:   a.settings.LLMEnabled,
+				LLMBinary:    a.settings.LLMBinary,
+				LLMModel:     a.settings.LLMModel,
+				LLMThreads:   a.settings.LLMThreads,
+				LLMTimeout:   a.settings.EffectiveLLMTimeout(),
+				LLMGPULayers: a.settings.LLMGPULayers,
+			})
+			fyne.Do(func() {
+				explainFolderBtn.Enable()
+				text := ""
+				if err != nil {
+					text = "Error: " + err.Error()
+				} else if ans.LLMAnswer != "" {
+					text = ans.LLMAnswer
+				} else {
+					// Fall back to FTS citations
+					for _, h := range ans.Hits {
+						text += "• " + h.Path + "\n"
+					}
+					if text == "" {
+						text = "No relevant files found for this folder."
+					}
+				}
+				body := widget.NewLabel(text)
+				body.Wrapping = fyne.TextWrapWord
+				scroll := container.NewVScroll(body)
+				scroll.SetMinSize(fyne.NewSize(500, 300))
+				d := dialog.NewCustom("Folder Explanation", "Close", scroll, a.win)
+				d.Resize(fyne.NewSize(540, 360))
+				d.Show()
+			})
+		}()
+	}
+
 	zoomOut := widget.NewButton("−", func() {
 		if scale > diagramMinScale {
 			scale -= diagramZoomStep
@@ -109,7 +160,17 @@ func newDiagramTab(files []scanner.FileInfo, stack stackdetect.Report, folders [
 		}
 	})
 
-	controls := container.NewHBox(widget.NewLabel("Zoom:"), zoomOut, reset, zoomIn, fit)
+	exportBtn := widget.NewButton("Export SVG", func() {
+		layout := ComputeDiagramLayoutForScope(files, stack, folders, entries, currentScope)
+		svgPath := filepath.Join(res.OutDir, "architecture.svg")
+		if err := ExportDiagramSVG(layout, svgPath); err != nil {
+			dialog.ShowError(err, a.win)
+		} else {
+			dialog.ShowInformation("Exported", "Architecture diagram saved to:\n"+svgPath, a.win)
+		}
+	})
+
+	controls := container.NewHBox(widget.NewLabel("Zoom:"), zoomOut, reset, zoomIn, fit, widget.NewSeparator(), explainFolderBtn, exportBtn)
 
 	legend := container.NewHBox(
 		widget.NewLabel("Legend:"),

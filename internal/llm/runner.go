@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -54,6 +55,7 @@ type Config struct {
 	Timeout        time.Duration // wall-clock limit for the subprocess; 0 = no timeout
 	MaxOutputBytes int64         // byte ceiling on stdout; enforces G-7 resource cap
 	GPULayers      int           // GPU layers passed to --gpu-layers / -ngl; 0 = default (no offload)
+	TokenCallback  func(string)  // optional callback for streaming tokens in real-time
 }
 
 // limitedWriter is an io.Writer that accumulates bytes up to a fixed ceiling.
@@ -126,11 +128,40 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 
 	cmd := exec.CommandContext(runCtx, cfg.BinaryPath, args...)
 	out := &limitedWriter{limit: cfg.MaxOutputBytes}
-	cmd.Stdout = out
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	buf := make([]byte, 1024)
+	state := 0 // 0: searching key, 1: searching start quote, 2: capturing content
+	keyBuf := ""
+	escaped := false
+
+	for {
+		n, err := stdoutPipe.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			if _, werr := out.Write(chunk); werr != nil {
+				return nil, werr
+			}
+
+			if cfg.TokenCallback != nil {
+				parseAnswerStream(chunk, &state, &keyBuf, &escaped, cfg.TokenCallback)
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
 		if out.err != nil {
 			return nil, out.err
 		}
@@ -147,3 +178,48 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 	}
 	return out.Bytes(), nil
 }
+
+func parseAnswerStream(chunk []byte, state *int, keyBuf *string, escaped *bool, tokenCallback func(string)) {
+	for _, b := range chunk {
+		switch *state {
+		case 0:
+			if b == ':' {
+				if strings.Contains(*keyBuf, "answer") {
+					*state = 1
+				}
+			} else if b >= 'a' && b <= 'z' {
+				*keyBuf += string(b)
+			}
+		case 1:
+			if b == '"' {
+				*state = 2
+				*escaped = false
+			}
+		case 2:
+			if *escaped {
+				switch b {
+				case 'n':
+					tokenCallback("\n")
+				case 't':
+					tokenCallback("\t")
+				case '"':
+					tokenCallback("\"")
+				case '\\':
+					tokenCallback("\\")
+				default:
+					tokenCallback(string(b))
+				}
+				*escaped = false
+			} else {
+				if b == '\\' {
+					*escaped = true
+				} else if b == '"' {
+					*state = 4 // Done
+				} else {
+					tokenCallback(string(b))
+				}
+			}
+		}
+	}
+}
+

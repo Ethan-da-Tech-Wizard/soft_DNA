@@ -897,7 +897,7 @@ func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 	}
 
 	var diagBuf bytes.Buffer
-	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, 0, files, &diagBuf)
+	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", "mock_anno", 1, 0, 5*time.Second, 0, files, &diagBuf, nil, nil)
 	if err != nil {
 		t.Fatalf("runLLMPipeline failed: %v", err)
 	}
@@ -1170,5 +1170,65 @@ func TestRunPipelineLogsProgress(t *testing.T) {
 	}
 	if !strings.Contains(logStr, "[Index] Indexing project files...") {
 		t.Errorf("log output missing indexing start; got: %q", logStr)
+	}
+}
+
+func TestIncrementalRescanPipeline(t *testing.T) {
+	tempDir := t.TempDir()
+	outDir := filepath.Join(t.TempDir(), "out")
+
+	filename := filepath.Join(tempDir, "main.go")
+	if err := os.WriteFile(filename, []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := llmRun
+	defer func() { llmRun = orig }()
+	llmRunCalls := 0
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		llmRunCalls++
+		if strings.Contains(prompt, "Verified symbols") {
+			return []byte(`{"file_summary":"This is main.go","symbol_explanations":[{"name":"main","explanation":"entry function"}]}`), nil
+		}
+		return []byte(`{"project_description":"A Go app"}`), nil
+	}
+
+	opts := PipelineOptions{
+		Root:       tempDir,
+		OutDir:     outDir,
+		LLMEnabled: true,
+		LLMBinary:  "mock_bin",
+		LLMModel:   "mock_model",
+	}
+	_, err := RunPipeline(opts, io.Discard)
+	if err != nil {
+		t.Fatalf("first RunPipeline failed: %v", err)
+	}
+	if llmRunCalls != 2 {
+		t.Fatalf("expected 2 LLM calls (1 overview + 1 file explanation), got %d", llmRunCalls)
+	}
+
+	reportPath := filepath.Join(outDir, "report.json")
+	if _, err := os.Stat(reportPath); err != nil {
+		t.Fatalf("report.json not written: %v", err)
+	}
+
+	llmRunCalls = 0
+
+	res2, err := RunPipeline(opts, io.Discard)
+	if err != nil {
+		t.Fatalf("second RunPipeline failed: %v", err)
+	}
+
+	if llmRunCalls != 1 {
+		t.Fatalf("expected only 1 LLM call (overview only), got %d", llmRunCalls)
+	}
+
+	exp, ok := res2.LLM.FileSummaries["main.go"]
+	if !ok {
+		t.Fatal("expected main.go summary in res2")
+	}
+	if exp.FileSummary != "This is main.go" {
+		t.Errorf("expected summary 'This is main.go', got %q", exp.FileSummary)
 	}
 }

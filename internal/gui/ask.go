@@ -43,26 +43,49 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 		question.SetText("")
 		send.Disable()
 		addBubble("You", q)
+		clTitle := widget.NewLabel("CodeLens")
+		clTitle.TextStyle = fyne.TextStyle{Bold: true}
+		clBody := widget.NewLabel("Thinking…")
+		clBody.Wrapping = fyne.TextWrapWord
+		history.Add(container.NewVBox(clTitle, clBody, widget.NewSeparator()))
+		historyScroll.ScrollToBottom()
 
 		go func() {
+			gotTokens := false
 			ans, err := cli.Answer(cli.AnswerOptions{
-				Root:       res.Root,
-				OutDir:     res.OutDir,
-				Question:   q,
-				Entries:    res.Entries,
-				LLMEnabled: a.settings.LLMEnabled,
-				LLMBinary:  a.settings.LLMBinary,
-				LLMModel:   a.settings.LLMModel,
-				LLMThreads: a.settings.LLMThreads,
-				LLMTimeout: a.settings.EffectiveLLMTimeout(),
+				Root:         res.Root,
+				OutDir:       res.OutDir,
+				Question:     q,
+				Entries:      res.Entries,
+				LLMEnabled:   a.settings.LLMEnabled,
+				LLMBinary:    a.settings.LLMBinary,
+				LLMModel:     a.settings.LLMModel,
+				LLMThreads:   a.settings.LLMThreads,
+				LLMTimeout:   a.settings.EffectiveLLMTimeout(),
+				LLMGPULayers: a.settings.LLMGPULayers,
+				TokenCallback: func(token string) {
+					fyne.Do(func() {
+						if !gotTokens {
+							clBody.SetText("")
+							gotTokens = true
+						}
+						clBody.SetText(clBody.Text + token)
+						historyScroll.ScrollToBottom()
+					})
+				},
 			})
 			fyne.Do(func() {
 				send.Enable()
 				if err != nil {
-					addBubble("CodeLens", "Error: "+err.Error())
+					if !gotTokens {
+						clBody.SetText("Error: " + err.Error())
+					} else {
+						clBody.SetText(clBody.Text + "\n\nError: " + err.Error())
+					}
 					return
 				}
-				addBubble("CodeLens", formatAnswer(ans))
+				clBody.SetText(formatAnswer(ans))
+				historyScroll.ScrollToBottom()
 			})
 		}()
 	}
