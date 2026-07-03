@@ -231,3 +231,27 @@ func writeFile(t *testing.T, root, rel, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestScanIgnoresToolCacheDirectories(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "main.py", "print('hi')\n")
+	for _, dir := range []string{
+		".mypy_cache", ".pytest_cache", ".ruff_cache", ".tox",
+		".eggs", ".claude", ".gradle", ".terraform", ".svn", ".hg",
+	} {
+		writeFile(t, root, dir+"/junk.py", "polluted = True\n")
+	}
+
+	files, err := Scan(root, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 1 || files[0].Path != "main.py" {
+		paths := make([]string, 0, len(files))
+		for _, f := range files {
+			paths = append(paths, f.Path)
+		}
+		t.Fatalf("scan picked up cache-directory contents: %v, want just main.py", paths)
+	}
+}
