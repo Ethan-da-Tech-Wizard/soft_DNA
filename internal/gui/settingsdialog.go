@@ -49,12 +49,19 @@ func (a *App) showSettingsDialog() {
 	maxFilesEntry.SetText(strconv.Itoa(a.settings.LLMMaxFiles))
 	maxFilesEntry.SetPlaceHolder("0 = no limit")
 
+	timeoutEntry := widget.NewEntry()
+	if a.settings.LLMTimeoutSec > 0 {
+		timeoutEntry.SetText(strconv.Itoa(a.settings.LLMTimeoutSec))
+	}
+	timeoutEntry.SetPlaceHolder("auto (by model size)")
+
 	form := widget.NewForm(
 		widget.NewFormItem("", enabled),
 		widget.NewFormItem("llama-cli binary", container.NewBorder(nil, nil, nil, binaryBrowse, binaryEntry)),
 		widget.NewFormItem("GGUF model file", container.NewBorder(nil, nil, nil, modelBrowse, modelEntry)),
 		widget.NewFormItem("CPU threads", threadsEntry),
 		widget.NewFormItem("Max files to annotate", maxFilesEntry),
+		widget.NewFormItem("Timeout per call (sec)", timeoutEntry),
 	)
 
 	d := dialog.NewCustomConfirm("Settings", "Save", "Cancel", form, func(ok bool) {
@@ -69,13 +76,22 @@ func (a *App) showSettingsDialog() {
 		if err != nil || maxFiles < 0 {
 			maxFiles = a.settings.LLMMaxFiles
 		}
+		timeoutSec := 0 // empty field = automatic, scaled by model size
+		if strings.TrimSpace(timeoutEntry.Text) != "" {
+			if v, err := strconv.Atoi(timeoutEntry.Text); err == nil && v > 0 {
+				timeoutSec = v
+			} else {
+				timeoutSec = a.settings.LLMTimeoutSec
+			}
+		}
 		a.settings = Settings{
-			LLMEnabled:  enabled.Checked,
-			LLMBinary:   binaryEntry.Text,
-			LLMModel:    modelEntry.Text,
-			LLMThreads:  threads,
-			LLMMaxFiles: maxFiles,
-			LastProject: a.settings.LastProject,
+			LLMEnabled:    enabled.Checked,
+			LLMBinary:     binaryEntry.Text,
+			LLMModel:      modelEntry.Text,
+			LLMThreads:    threads,
+			LLMMaxFiles:   maxFiles,
+			LLMTimeoutSec: timeoutSec,
+			LastProject:   a.settings.LastProject,
 		}
 		if err := a.settings.Save(); err != nil {
 			dialog.ShowError(err, a.win)
@@ -86,6 +102,6 @@ func (a *App) showSettingsDialog() {
 				a.win)
 		}
 	}, a.win)
-	d.Resize(fyne.NewSize(520, 300))
+	d.Resize(fyne.NewSize(520, 340))
 	d.Show()
 }
