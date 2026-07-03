@@ -1103,3 +1103,46 @@ func TestRunPipelineLLMWarningOnMissingBinary(t *testing.T) {
 		t.Fatalf("Warnings = %v, want one binary/model-missing warning", res.Warnings)
 	}
 }
+
+func TestTestModelReportsSuccess(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		if cfg.MaxTokens != 8 {
+			t.Errorf("MaxTokens = %d, want 8 (tiny test inference)", cfg.MaxTokens)
+		}
+		return []byte("ready"), nil
+	}
+
+	msg, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second)
+	if err != nil {
+		t.Fatalf("TestModel failed: %v", err)
+	}
+	if !strings.Contains(msg, "OK") {
+		t.Fatalf("message = %q, want an OK confirmation", msg)
+	}
+}
+
+func TestTestModelSurfacesRunnerError(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		return nil, errors.New("llm: binary not found")
+	}
+
+	if _, err := TestModel("/missing", "/missing.gguf", 2, 5*time.Second); err == nil || !strings.Contains(err.Error(), "binary not found") {
+		t.Fatalf("err = %v, want the runner's binary-not-found error", err)
+	}
+}
+
+func TestTestModelRejectsEmptyOutput(t *testing.T) {
+	orig := llmRun
+	defer func() { llmRun = orig }()
+	llmRun = func(ctx context.Context, cfg llm.Config, prompt string) ([]byte, error) {
+		return []byte("   \n"), nil
+	}
+
+	if _, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second); err == nil {
+		t.Fatal("expected an error for whitespace-only model output")
+	}
+}

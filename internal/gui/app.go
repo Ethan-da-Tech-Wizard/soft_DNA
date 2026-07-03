@@ -2,6 +2,7 @@ package gui
 
 import (
 	"path/filepath"
+	"strings"
 
 	"codelens-local/internal/cli"
 
@@ -31,6 +32,11 @@ type App struct {
 	haveResult bool
 
 	scanProgress *widget.ProgressBarInfinite // non-nil only while a scan is running
+
+	// Failure tallies from the last scan's diagnostic stream, used by the
+	// AI Summaries tab to explain an empty result instead of shrugging.
+	scanTimeouts    int // lines mentioning a timed-out model call
+	scanFailedTurns int // [LLM Loop] turns with Health = 0
 }
 
 // NewApp builds the application and its main window, loading any previously
@@ -115,6 +121,8 @@ func (a *App) startScan() {
 
 	a.scanBtn.Disable()
 	a.logView.SetText("")
+	a.scanTimeouts = 0
+	a.scanFailedTurns = 0
 	a.scanProgress = widget.NewProgressBarInfinite()
 	a.results.Objects = []fyne.CanvasObject{container.NewCenter(container.NewVBox(
 		widget.NewLabel("Scanning…"), a.scanProgress,
@@ -133,7 +141,15 @@ func (a *App) startScan() {
 
 func (a *App) runScan(root string) {
 	diagOut := &lineWriter{onLine: func(line string) {
-		fyne.Do(func() { a.appendLog(line) })
+		fyne.Do(func() {
+			if strings.Contains(line, "timed out") {
+				a.scanTimeouts++
+			}
+			if strings.Contains(line, "| Health = 0 |") {
+				a.scanFailedTurns++
+			}
+			a.appendLog(line)
+		})
 	}}
 
 	opts := cli.PipelineOptions{

@@ -27,7 +27,7 @@ func (a *App) buildReportTabs(res cli.PipelineResult) fyne.CanvasObject {
 		container.NewTabItem("Entry Points", newEntryPointsTab(res)),
 		container.NewTabItem("Functions & Classes", newSymbolsTab(res.Symbols, "function", "method", "class", "type", "table", "view", "procedure")),
 		container.NewTabItem("Imports", newSymbolsTab(res.Symbols, "import")),
-		container.NewTabItem("AI Summaries", newAISummariesTab(res)),
+		container.NewTabItem("AI Summaries", a.newAISummariesTab(res)),
 		container.NewTabItem("Diagram", newDiagramTab(res.Stack, res.Folders, res.Entries)),
 		container.NewTabItem("Ask", a.newAskTab(res)),
 	)
@@ -140,11 +140,29 @@ func newSymbolsTab(symbolList []symbols.Symbol, kinds ...string) fyne.CanvasObje
 	return container.NewBorder(search, nil, nil, nil, table)
 }
 
-func newAISummariesTab(res cli.PipelineResult) fyne.CanvasObject {
+// newAISummariesTab renders the LLM output — and when there is none, it says
+// exactly why (skipped pass, timeouts, validation failures) with a shortcut
+// to Settings, instead of leaving the user staring at an empty tab.
+func (a *App) newAISummariesTab(res cli.PipelineResult) fyne.CanvasObject {
+	openSettings := widget.NewButton("Open Settings", func() { a.showSettingsDialog() })
+
 	if !res.LLM.Enabled {
-		return container.NewCenter(widget.NewLabel(
-			"AI summaries are off.\nEnable the local LLM in Settings and scan again to generate them.",
-		))
+		var msg string
+		if a.settings.LLMEnabled {
+			// The user enabled AI but the pass never ran; res.Warnings holds
+			// the pipeline's own reason (missing binary/model, hard failure).
+			msg = "The AI pass was enabled but did not run:"
+			if len(res.Warnings) > 0 {
+				msg += "\n\n• " + strings.Join(res.Warnings, "\n• ")
+			} else {
+				msg += "\n\n(no reason was reported — check the log panel)"
+			}
+		} else {
+			msg = "AI summaries are off.\nEnable the local LLM in Settings and scan again to generate them."
+		}
+		label := widget.NewLabel(msg)
+		label.Wrapping = fyne.TextWrapWord
+		return container.NewCenter(container.NewVBox(label, container.NewCenter(openSettings)))
 	}
 
 	var items []*widget.AccordionItem
@@ -183,6 +201,29 @@ func newAISummariesTab(res cli.PipelineResult) fyne.CanvasObject {
 		note := widget.NewLabel("Skipped after repeated validation failures: " + strings.Join(stalled, ", "))
 		note.Wrapping = fyne.TextWrapWord
 		items = append(items, widget.NewAccordionItem("Skipped Files", note))
+	}
+
+	// The pass ran but produced no real content: explain the dominant
+	// failure mode using the tallies collected from the diagnostic stream.
+	if res.LLM.ProjectOverview == "" && len(res.LLM.FileSummaries) == 0 {
+		msg := "The model ran but produced no usable summaries — see the log panel."
+		switch {
+		case a.scanTimeouts > 0:
+			msg = fmt.Sprintf(
+				"%d model call(s) timed out (current limit: %s per call).\nRaise \"Timeout per call\" in Settings, or switch to a smaller model.",
+				a.scanTimeouts, a.settings.EffectiveLLMTimeout())
+		case a.scanFailedTurns > 0:
+			msg = fmt.Sprintf(
+				"%d model turn(s) failed validation and were skipped — the log panel has each raw output.",
+				a.scanFailedTurns)
+		}
+		label := widget.NewLabel(msg)
+		label.Wrapping = fyne.TextWrapWord
+		header := container.NewVBox(label, container.NewHBox(openSettings))
+		if len(items) == 0 {
+			return container.NewCenter(header)
+		}
+		return container.NewBorder(header, nil, nil, nil, container.NewVScroll(widget.NewAccordion(items...)))
 	}
 
 	if len(items) == 0 {

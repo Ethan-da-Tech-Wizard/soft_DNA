@@ -1236,3 +1236,37 @@ func summarizeFiles(
 
 	return summaries, stalled
 }
+
+// TestModel runs one tiny (8-token) inference against binaryPath/modelPath
+// and returns a short human-readable result. It exists so a front end can
+// verify an AI configuration in seconds — surfacing a missing binary, a bad
+// model path, or a too-short timeout — before the user commits to a scan
+// that may run for hours.
+func TestModel(binaryPath, modelPath string, threads int, timeout time.Duration) (string, error) {
+	if threads <= 0 {
+		threads = runtime.NumCPU()
+	}
+	if timeout <= 0 {
+		timeout = 120 * time.Second
+	}
+	cfg := llm.Config{
+		BinaryPath:     binaryPath,
+		ModelPath:      modelPath,
+		Threads:        threads,
+		MaxTokens:      8,
+		Temperature:    0.1,
+		Timeout:        timeout,
+		MaxOutputBytes: 8192,
+	}
+	start := time.Now()
+	out, err := llmRun(context.Background(), cfg, "Reply with one word: ready")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(string(out)) == "" {
+		return "", errors.New("model produced empty output")
+	}
+	return fmt.Sprintf(
+		"OK — test inference completed in %.1fs. Keep \"Timeout per call\" comfortably above times like this.",
+		time.Since(start).Seconds()), nil
+}

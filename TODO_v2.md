@@ -55,7 +55,7 @@ strong feature, not a framework.
   itself never says why it's empty.
 - **D3 — No timeout or GPU control exists in the GUI at all.**
 
-## T1 — Raise and expose the inference timeout
+## T1 — Raise and expose the inference timeout ✅ DONE
 
 **Files:** `internal/gui/settings.go`, `internal/gui/settingsdialog.go`,
 `internal/gui/app.go`, tests alongside.
@@ -74,7 +74,7 @@ already owns retry policy.
 default where it times out today; settings round-trip test covers the
 field.
 
-## T2 — The AI tab must explain itself when empty
+## T2 — The AI tab must explain itself when empty ✅ DONE
 
 **Files:** `internal/gui/report.go`, `internal/gui/app.go`.
 
@@ -91,7 +91,7 @@ an existing empty-state.
 **Accept when:** enabling LLM with a dead binary path yields a tab that
 names the problem; the always-timeout mock yields the timeout message.
 
-## T3 — "Test model" button in Settings
+## T3 — "Test model" button in Settings ✅ DONE
 
 **Files:** `internal/gui/settingsdialog.go`, small exported helper in
 `internal/cli` (reuse `llmRun` seam), tests.
@@ -171,7 +171,7 @@ Ask). That's P3 brainstorm — design it only after T1–T4 prove out.
   "Project files".
 - Nothing is clickable. Depth stops at top-level folders.
 
-## T6 — Stop scanning noise directories (quick win, fixes 4 features)
+## T6 — Stop scanning noise directories (quick win, fixes 4 features) ✅ DONE
 
 **Files:** `internal/scanner/scanner.go` (`defaultIgnoredDirs`), test.
 
