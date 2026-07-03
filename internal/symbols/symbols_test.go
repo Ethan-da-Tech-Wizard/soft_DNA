@@ -428,3 +428,21 @@ int compute(int value) {
 		}
 	}
 }
+
+func BenchmarkExtractAll(b *testing.B) {
+	root := filepath.Join("..", "..", "testdata", "sample_go")
+	files, err := scanner.Scan(root, scanner.Options{})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	largeFileList := make([]scanner.FileInfo, 0, len(files)*50)
+	for i := 0; i < 50; i++ {
+		largeFileList = append(largeFileList, files...)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ExtractAll(root, largeFileList)
+	}
+}

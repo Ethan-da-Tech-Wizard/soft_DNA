@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
 	"codelens-local/internal/cli"
@@ -26,13 +27,20 @@ import (
 // the interactive, point-and-click equivalent of CODEBASE_REPORT.md, built
 // directly from structured data rather than by parsing Markdown.
 func (a *App) buildReportTabs(res cli.PipelineResult) fyne.CanvasObject {
+	if len(a.funcRows) == 0 && len(res.Symbols) > 0 {
+		a.funcSymbols, a.funcRows = prepareSymbolRows(res.Symbols, []string{"function", "method", "class", "type", "table", "view", "procedure"})
+	}
+	if len(a.importRows) == 0 && len(res.Symbols) > 0 {
+		a.importSymbols, a.importRows = prepareSymbolRows(res.Symbols, []string{"import"})
+	}
+
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Summary", a.newSummaryTab(res)),
 		container.NewTabItem("Tech Stack", newTechStackTab(res)),
 		container.NewTabItem("Folders", newFoldersTab(res)),
 		container.NewTabItem("Entry Points", newEntryPointsTab(res)),
-		container.NewTabItem("Functions & Classes", newSymbolsTab(res.Symbols, "function", "method", "class", "type", "table", "view", "procedure")),
-		container.NewTabItem("Imports", newSymbolsTab(res.Symbols, "import")),
+		container.NewTabItem("Functions & Classes", newSymbolsTab(a.funcSymbols, a.funcRows)),
+		container.NewTabItem("Imports", newSymbolsTab(a.importSymbols, a.importRows)),
 		container.NewTabItem("AI Summaries", a.newAISummariesTab(res)),
 		container.NewTabItem("Diagram", newDiagramTab(res.Files, res.Stack, res.Folders, res.Entries)),
 		container.NewTabItem("Ask", a.newAskTab(res)),
@@ -110,29 +118,40 @@ func filterSymbols(all []symbols.Symbol, query string) []symbols.Symbol {
 	return out
 }
 
-// newSymbolsTab lists symbols of the given kinds with a live text filter by
-// name or file path.
-func newSymbolsTab(symbolList []symbols.Symbol, kinds ...string) fyne.CanvasObject {
+// prepareSymbolRows filters and formats a raw slice of Symbol to lists of strings.
+func prepareSymbolRows(symbolList []symbols.Symbol, kinds []string) ([]symbols.Symbol, [][]string) {
 	allowed := make(map[string]struct{}, len(kinds))
 	for _, k := range kinds {
 		allowed[k] = struct{}{}
 	}
-	var all []symbols.Symbol
+	var filtered []symbols.Symbol
 	for _, s := range symbolList {
 		if _, ok := allowed[s.Kind]; ok {
-			all = append(all, s)
+			filtered = append(filtered, s)
 		}
 	}
+	rows := make([][]string, len(filtered))
+	for i, s := range filtered {
+		rows[i] = []string{s.File, s.Kind, s.Name, strconv.Itoa(s.StartLine), s.Signature}
+	}
+	return filtered, rows
+}
 
+// newLiveTable creates a responsive table using widget.Table.
+// (Assumes newLiveTable is already defined elsewhere in internal/gui)
+
+// newSymbolsTab lists symbols of the given kinds with a live text filter by
+// name or file path.
+func newSymbolsTab(all []symbols.Symbol, initialRows [][]string) fyne.CanvasObject {
 	toRows := func(list []symbols.Symbol) [][]string {
-		rows := make([][]string, 0, len(list))
-		for _, s := range list {
-			rows = append(rows, []string{s.File, s.Kind, s.Name, fmt.Sprintf("%d", s.StartLine), s.Signature})
+		rows := make([][]string, len(list))
+		for i, s := range list {
+			rows[i] = []string{s.File, s.Kind, s.Name, strconv.Itoa(s.StartLine), s.Signature}
 		}
 		return rows
 	}
 
-	table, setRows := newLiveTable([]string{"File", "Kind", "Name", "Line", "Signature"}, toRows(all))
+	table, setRows := newLiveTable([]string{"File", "Kind", "Name", "Line", "Signature"}, initialRows)
 
 	search := widget.NewEntry()
 	search.SetPlaceHolder("Filter by name or file…")

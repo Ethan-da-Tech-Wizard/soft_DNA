@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -896,7 +897,7 @@ func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 	}
 
 	var diagBuf bytes.Buffer
-	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, files, &diagBuf)
+	res, err := runLLMPipeline(tmpDir, dbPath, "mock_bin", "mock_model", 1, 0, 5*time.Second, 0, files, &diagBuf)
 	if err != nil {
 		t.Fatalf("runLLMPipeline failed: %v", err)
 	}
@@ -1114,7 +1115,7 @@ func TestTestModelReportsSuccess(t *testing.T) {
 		return []byte("ready"), nil
 	}
 
-	msg, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second)
+	msg, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second, 0)
 	if err != nil {
 		t.Fatalf("TestModel failed: %v", err)
 	}
@@ -1130,7 +1131,7 @@ func TestTestModelSurfacesRunnerError(t *testing.T) {
 		return nil, errors.New("llm: binary not found")
 	}
 
-	if _, err := TestModel("/missing", "/missing.gguf", 2, 5*time.Second); err == nil || !strings.Contains(err.Error(), "binary not found") {
+	if _, err := TestModel("/missing", "/missing.gguf", 2, 5*time.Second, 0); err == nil || !strings.Contains(err.Error(), "binary not found") {
 		t.Fatalf("err = %v, want the runner's binary-not-found error", err)
 	}
 }
@@ -1142,7 +1143,32 @@ func TestTestModelRejectsEmptyOutput(t *testing.T) {
 		return []byte("   \n"), nil
 	}
 
-	if _, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second); err == nil {
+	if _, err := TestModel("/bin/llama", "/models/m.gguf", 2, 5*time.Second, 0); err == nil {
 		t.Fatal("expected an error for whitespace-only model output")
+	}
+}
+
+func TestRunPipelineLogsProgress(t *testing.T) {
+	tempDir := t.TempDir()
+	for i := 0; i < 210; i++ {
+		filename := filepath.Join(tempDir, fmt.Sprintf("file_%d.go", i))
+		if err := os.WriteFile(filename, []byte("package main\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var buf bytes.Buffer
+	outDir := filepath.Join(t.TempDir(), "out")
+	_, err := RunPipeline(PipelineOptions{Root: tempDir, OutDir: outDir}, &buf)
+	if err != nil {
+		t.Fatalf("RunPipeline failed: %v", err)
+	}
+
+	logStr := buf.String()
+	if !strings.Contains(logStr, "[Scanner] Scanned 200 files...") {
+		t.Errorf("log output missing scanner progress; got: %q", logStr)
+	}
+	if !strings.Contains(logStr, "[Index] Indexing project files...") {
+		t.Errorf("log output missing indexing start; got: %q", logStr)
 	}
 }

@@ -1,9 +1,11 @@
 package gui
 
 import (
-	"codelens-local/internal/cli"
+	"os"
 	"strconv"
 	"strings"
+
+	"codelens-local/internal/cli"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -56,6 +58,27 @@ func (a *App) showSettingsDialog() {
 	}
 	timeoutEntry.SetPlaceHolder("auto (by model size)")
 
+	gpuLayersEntry := widget.NewEntry()
+	gpuLayersEntry.SetText(strconv.Itoa(a.settings.LLMGPULayers))
+	gpuLayersEntry.SetPlaceHolder("0 = CPU only")
+
+	modelHint := widget.NewLabel("")
+	modelHint.Wrapping = fyne.TextWrapWord
+	updateModelHint := func(path string) {
+		if path == "" {
+			modelHint.SetText("")
+			return
+		}
+		info, err := os.Stat(path)
+		if err == nil && info.Size() >= 4*1024*1024*1024 {
+			modelHint.SetText("Tip: Large model (≥4 GB). Great for Ask/overview, slow for per-file annotations on CPU. Consider setting GPU layers > 0 or using a smaller model.")
+		} else {
+			modelHint.SetText("")
+		}
+	}
+	modelEntry.OnChanged = updateModelHint
+	updateModelHint(modelEntry.Text)
+
 	// Test model: one tiny inference against the paths currently typed in
 	// this dialog (not the saved settings), so problems surface in seconds
 	// instead of after an hours-long scan.
@@ -71,12 +94,13 @@ func (a *App) showSettingsDialog() {
 		if v, err := strconv.Atoi(strings.TrimSpace(timeoutEntry.Text)); err == nil && v > 0 {
 			trial.LLMTimeoutSec = v
 		}
+		gpuLayers, _ := strconv.Atoi(gpuLayersEntry.Text)
 		binary, model, timeout := binaryEntry.Text, modelEntry.Text, trial.EffectiveLLMTimeout()
 
 		testBtn.Disable()
 		testStatus.SetText("Testing… (a large model can take a minute or two to load)")
 		go func() {
-			msg, err := cli.TestModel(binary, model, threads, timeout)
+			msg, err := cli.TestModel(binary, model, threads, timeout, gpuLayers)
 			fyne.Do(func() {
 				testBtn.Enable()
 				if err != nil {
@@ -92,7 +116,9 @@ func (a *App) showSettingsDialog() {
 		widget.NewFormItem("", enabled),
 		widget.NewFormItem("llama-cli binary", container.NewBorder(nil, nil, nil, binaryBrowse, binaryEntry)),
 		widget.NewFormItem("GGUF model file", container.NewBorder(nil, nil, nil, modelBrowse, modelEntry)),
+		widget.NewFormItem("", modelHint),
 		widget.NewFormItem("CPU threads", threadsEntry),
+		widget.NewFormItem("GPU layers (-ngl)", gpuLayersEntry),
 		widget.NewFormItem("Max files to annotate", maxFilesEntry),
 		widget.NewFormItem("Timeout per call (sec)", timeoutEntry),
 		widget.NewFormItem("", container.NewVBox(container.NewHBox(testBtn), testStatus)),
@@ -118,6 +144,10 @@ func (a *App) showSettingsDialog() {
 				timeoutSec = a.settings.LLMTimeoutSec
 			}
 		}
+		gpuLayers, err := strconv.Atoi(gpuLayersEntry.Text)
+		if err != nil || gpuLayers < 0 {
+			gpuLayers = a.settings.LLMGPULayers
+		}
 		a.settings = Settings{
 			LLMEnabled:    enabled.Checked,
 			LLMBinary:     binaryEntry.Text,
@@ -125,6 +155,7 @@ func (a *App) showSettingsDialog() {
 			LLMThreads:    threads,
 			LLMMaxFiles:   maxFiles,
 			LLMTimeoutSec: timeoutSec,
+			LLMGPULayers:  gpuLayers,
 			LastProject:   a.settings.LastProject,
 		}
 		if err := a.settings.Save(); err != nil {

@@ -2,8 +2,10 @@ package gui
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"codelens-local/internal/cli"
 	"codelens-local/internal/scanner"
@@ -326,5 +328,33 @@ func TestDiagramInteractiveNavigationAndColors(t *testing.T) {
 	tab := newDiagramTab(files, stackdetect.Report{}, folders, nil)
 	if tab == nil {
 		t.Fatal("newDiagramTab returned nil")
+	}
+}
+
+func TestSettingsGPULayersAndModelWarning(t *testing.T) {
+	s := Settings{
+		LLMGPULayers:  16,
+		LLMTimeoutSec: 120,
+	}
+	if s.LLMGPULayers != 16 {
+		t.Errorf("expected LLMGPULayers 16, got %d", s.LLMGPULayers)
+	}
+
+	largeModel := filepath.Join(t.TempDir(), "large_model.gguf")
+	f, err := os.Create(largeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Truncate(5 * 1024 * 1024 * 1024); err != nil {
+		f.Close()
+		t.Fatal(err)
+	}
+	f.Close()
+
+	s.LLMModel = largeModel
+	s.LLMTimeoutSec = 0
+	timeout := s.EffectiveLLMTimeout()
+	if timeout != 420*time.Second {
+		t.Errorf("EffectiveLLMTimeout() for 5GB model = %v, want 420s", timeout)
 	}
 }

@@ -28,7 +28,9 @@ type Settings struct {
 
 	// LLMTimeoutSec is the per-call inference deadline in seconds.
 	// 0 = automatic, scaled by model size (see EffectiveLLMTimeout).
+	// LLMGPULayers is the GPU layers setting (-ngl / --gpu-layers).
 	LLMTimeoutSec int `json:"llm_timeout_sec"`
+	LLMGPULayers  int `json:"llm_gpu_layers"`
 
 	// LastProject is the last folder scanned, restored into the path field
 	// on startup so reopening the app doesn't start from a blank slate.

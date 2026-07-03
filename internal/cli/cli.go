@@ -157,12 +157,13 @@ type PipelineOptions struct {
 	MaxFileSize int64
 	Ignore      []string
 
-	LLMEnabled  bool
-	LLMBinary   string
-	LLMModel    string
-	LLMThreads  int
-	LLMTimeout  time.Duration
-	LLMMaxFiles int
+	LLMEnabled   bool
+	LLMBinary    string
+	LLMModel     string
+	LLMThreads   int
+	LLMTimeout   time.Duration
+	LLMMaxFiles  int
+	LLMGPULayers int
 }
 
 // PipelineResult bundles every artifact RunPipeline produces: the raw
@@ -227,10 +228,15 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		return PipelineResult{}, fmt.Errorf("scan failed: %w", err)
 	}
 
+	for i := 200; i <= len(files); i += 200 {
+		fmt.Fprintf(diagOut, "[Scanner] Scanned %d files...\n", i)
+	}
+
 	stack := stackdetect.Detect(files, opts.Root)
 	folders, entries := structure.Analyze(files)
 	symbolList := symbols.ExtractAll(opts.Root, files)
 
+	fmt.Fprintf(diagOut, "[Index] Indexing project files...\n")
 	stats, err := buildIndex(opts.Root, outDir, files, symbolList)
 	if err != nil {
 		return PipelineResult{}, fmt.Errorf("index failed: %w", err)
@@ -260,7 +266,7 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 				timeout = 60 * time.Second
 			}
 			dbPath := filepath.Join(outDir, dbName)
-			llmRes, llmErr := runLLMPipeline(opts.Root, dbPath, opts.LLMBinary, opts.LLMModel, threads, opts.LLMMaxFiles, timeout, files, diagOut)
+			llmRes, llmErr := runLLMPipeline(opts.Root, dbPath, opts.LLMBinary, opts.LLMModel, threads, opts.LLMMaxFiles, timeout, opts.LLMGPULayers, files, diagOut)
 			if llmErr != nil {
 				res.Warnings = append(res.Warnings, fmt.Sprintf("LLM pass failed: %v; continuing with deterministic report", llmErr))
 			} else {
@@ -288,11 +294,12 @@ type AnswerOptions struct {
 	Question string
 	Entries  []structure.EntryPoint
 
-	LLMEnabled bool
-	LLMBinary  string
-	LLMModel   string
-	LLMThreads int
-	LLMTimeout time.Duration
+	LLMEnabled   bool
+	LLMBinary    string
+	LLMModel     string
+	LLMThreads   int
+	LLMTimeout   time.Duration
+	LLMGPULayers int
 }
 
 // AnswerResult holds the outcome of Answer: the FTS citations, and — when an
@@ -324,7 +331,7 @@ func Answer(opts AnswerOptions) (AnswerResult, error) {
 		if timeout <= 0 {
 			timeout = 60 * time.Second
 		}
-		answer, aErr := answerWithLLM(opts.Root, opts.Question, hits, opts.LLMBinary, opts.LLMModel, threads, timeout)
+		answer, aErr := answerWithLLM(opts.Root, opts.Question, hits, opts.LLMBinary, opts.LLMModel, threads, timeout, opts.LLMGPULayers)
 		if aErr != nil {
 			res.LLMWarning = fmt.Sprintf("grounded LLM answer failed: %v; falling back to FTS citations", aErr)
 		} else {
@@ -621,7 +628,7 @@ const (
 // answerWithLLM produces a grounded plain-English answer to question using
 // bounded snippets from the FTS hit files and one local LLM call. Any failure
 // returns an error so the caller can fall back to FTS-only citations.
-func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, modelPath string, threads int, timeout time.Duration) (string, error) {
+func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, modelPath string, threads int, timeout time.Duration, gpuLayers int) (string, error) {
 	if len(hits) == 0 {
 		return "", errors.New("no indexed matches to ground an answer")
 	}
@@ -677,6 +684,7 @@ func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, mo
 		Temperature:    0.1,
 		Timeout:        timeout,
 		MaxOutputBytes: 8192,
+		GPULayers:      gpuLayers,
 	}
 	raw, err := llmRun(context.Background(), cfg, prompt)
 	if err != nil {
@@ -962,7 +970,7 @@ const maxLLMSymbols = 5
 // post-validation. diagOut receives the [LLM Loop] diagnostic lines and any
 // warnings from this pass — the CLI passes its stderr, the GUI passes a
 // callback-backed writer that streams into a log widget.
-func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, files []scanner.FileInfo, diagOut io.Writer) (LLMResult, error) {
+func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFiles int, timeout time.Duration, gpuLayers int, files []scanner.FileInfo, diagOut io.Writer) (LLMResult, error) {
 	gCtx, err := grounding.Build(dbPath)
 	if err != nil {
 		return LLMResult{}, fmt.Errorf("grounding build: %w", err)
@@ -1011,6 +1019,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				Temperature:    0.1,
 				Timeout:        timeout,
 				MaxOutputBytes: 8192,
+				GPULayers:      gpuLayers,
 			}
 			for {
 				diag.BeginTurn()
@@ -1068,6 +1077,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath string, threads, maxFile
 				Temperature:    0.1,
 				Timeout:        timeout,
 				MaxOutputBytes: 8192,
+				GPULayers:      gpuLayers,
 			}
 			res.FileSummaries, res.Stalled = summarizeFiles(root, fileList, infoMap, fileSymbols, cfg, diag, diagOut)
 		} else {
@@ -1242,7 +1252,7 @@ func summarizeFiles(
 // verify an AI configuration in seconds — surfacing a missing binary, a bad
 // model path, or a too-short timeout — before the user commits to a scan
 // that may run for hours.
-func TestModel(binaryPath, modelPath string, threads int, timeout time.Duration) (string, error) {
+func TestModel(binaryPath, modelPath string, threads int, timeout time.Duration, gpuLayers int) (string, error) {
 	if threads <= 0 {
 		threads = runtime.NumCPU()
 	}
@@ -1257,6 +1267,7 @@ func TestModel(binaryPath, modelPath string, threads int, timeout time.Duration)
 		Temperature:    0.1,
 		Timeout:        timeout,
 		MaxOutputBytes: 8192,
+		GPULayers:      gpuLayers,
 	}
 	start := time.Now()
 	out, err := llmRun(context.Background(), cfg, "Reply with one word: ready")

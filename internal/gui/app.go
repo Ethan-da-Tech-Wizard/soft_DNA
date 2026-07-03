@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"codelens-local/internal/cli"
+	"codelens-local/internal/symbols"
 
 	"fyne.io/fyne/v2"
 	fyneapp "fyne.io/fyne/v2/app"
@@ -38,6 +39,11 @@ type App struct {
 	scanTimeouts    int // lines mentioning a timed-out model call
 	scanFailedTurns int // [LLM Loop] turns with Health = 0
 	logLines        []string
+
+	funcSymbols   []symbols.Symbol
+	funcRows      [][]string
+	importSymbols []symbols.Symbol
+	importRows    [][]string
 }
 
 // NewApp builds the application and its main window, loading any previously
@@ -168,6 +174,11 @@ func (a *App) runScan(root string) {
 	}
 
 	res, err := cli.RunPipeline(opts, diagOut)
+
+	if err == nil {
+		a.funcSymbols, a.funcRows = prepareSymbolRows(res.Symbols, []string{"function", "method", "class", "type", "table", "view", "procedure"})
+		a.importSymbols, a.importRows = prepareSymbolRows(res.Symbols, []string{"import"})
+	}
 
 	fyne.Do(func() {
 		a.scanBtn.Enable()
