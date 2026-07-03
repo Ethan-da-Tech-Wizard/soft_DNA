@@ -133,7 +133,12 @@ else
     fi
 fi
 
-DOWNLOAD_URL="https://github.com/ggerganov/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-${PLATFORM}.zip"
+EXT="tar.gz"
+if [[ "${PLATFORM}" == win-* ]]; then
+    EXT="zip"
+fi
+
+DOWNLOAD_URL="https://github.com/ggerganov/llama.cpp/releases/download/${TAG}/llama-${TAG}-bin-${PLATFORM}.${EXT}"
 echo "  URL      : ${DOWNLOAD_URL}"
 echo ""
 
@@ -144,7 +149,7 @@ echo ""
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "${WORK_DIR}"' EXIT
 
-ZIP_FILE="${WORK_DIR}/llama.zip"
+ZIP_FILE="${WORK_DIR}/llama.${EXT}"
 EXTRACT_DIR="${WORK_DIR}/extracted"
 mkdir -p "${EXTRACT_DIR}"
 
@@ -174,13 +179,17 @@ fi
 echo ""
 echo "==> Extracting..."
 
-if command -v unzip >/dev/null 2>&1; then
-    # Full (non-flat) extraction so we can find the binary at any nesting level.
-    unzip -q "${ZIP_FILE}" -d "${EXTRACT_DIR}"
-elif command -v python3 >/dev/null 2>&1; then
-    python3 -m zipfile -e "${ZIP_FILE}" "${EXTRACT_DIR}"
+if [[ "${EXT}" == "zip" ]]; then
+    if command -v unzip >/dev/null 2>&1; then
+        # Full (non-flat) extraction so we can find the binary at any nesting level.
+        unzip -q "${ZIP_FILE}" -d "${EXTRACT_DIR}"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -m zipfile -e "${ZIP_FILE}" "${EXTRACT_DIR}"
+    else
+        python -m zipfile -e "${ZIP_FILE}" "${EXTRACT_DIR}"
+    fi
 else
-    python -m zipfile -e "${ZIP_FILE}" "${EXTRACT_DIR}"
+    tar -xzf "${ZIP_FILE}" -C "${EXTRACT_DIR}"
 fi
 
 # ---------------------------------------------------------------------------
@@ -206,6 +215,12 @@ fi
 mkdir -p "${TARGET_DIR}"
 cp "${BIN_SRC}" "${TARGET_DIR}/${BINARY_NAME}"
 chmod +x "${TARGET_DIR}/${BINARY_NAME}"
+
+SRC_DIR="$(dirname "${BIN_SRC}")"
+# Also copy all shared libraries next to the binary, preserving symlinks
+cp -d "${SRC_DIR}"/*.so* "${TARGET_DIR}/" 2>/dev/null || true
+cp -d "${SRC_DIR}"/*.dylib* "${TARGET_DIR}/" 2>/dev/null || true
+cp -d "${SRC_DIR}"/*.dll* "${TARGET_DIR}/" 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # Verify

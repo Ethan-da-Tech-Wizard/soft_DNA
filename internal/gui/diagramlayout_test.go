@@ -61,3 +61,46 @@ func TestComputeDiagramLayoutNoDuplicateEdgesWithoutStack(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeDiagramLayoutWrapping(t *testing.T) {
+	// Create 12 folders. They should wrap into 3 rows of at most 5 columns:
+	// Row 0: 5 items
+	// Row 1: 5 items
+	// Row 2: 2 items
+	folders := make([]structure.Folder, 12)
+	for i := 0; i < 12; i++ {
+		folders[i] = structure.Folder{Path: "dir" + string(rune('a'+i)), Role: "Conventional"}
+	}
+	layout := ComputeDiagramLayout(stackdetect.Report{}, folders, nil)
+
+	// Expect 13 nodes (root + 12 folders)
+	if len(layout.Nodes) != 13 {
+		t.Fatalf("len(Nodes) = %d, want 13", len(layout.Nodes))
+	}
+
+	// Verify coordinates for row/col placements
+	// Node at index 1 is folders[0] (Row 0, Col 0)
+	// Node at index 6 is folders[5] (Row 1, Col 0)
+	// Node at index 11 is folders[10] (Row 2, Col 0)
+	f0 := layout.Nodes[1]
+	f5 := layout.Nodes[6]
+	f10 := layout.Nodes[11]
+
+	if f0.X != 0 || f0.Y != diagramVGap+diagramNodeH {
+		t.Errorf("Node f0 position = (%v, %v), want (0, %v)", f0.X, f0.Y, diagramVGap+diagramNodeH)
+	}
+	if f5.X != 0 || f5.Y != diagramVGap+diagramNodeH+(diagramNodeH+diagramVGap) {
+		t.Errorf("Node f5 position = (%v, %v), want (0, %v)", f5.X, f5.Y, diagramVGap+diagramNodeH+(diagramNodeH+diagramVGap))
+	}
+	if f10.X != 0 || f10.Y != diagramVGap+diagramNodeH+2*(diagramNodeH+diagramVGap) {
+		t.Errorf("Node f10 position = (%v, %v), want (0, %v)", f10.X, f10.Y, diagramVGap+diagramNodeH+2*(diagramNodeH+diagramVGap))
+	}
+
+	// Verify root node is centered above the 5-column maximum width
+	root := layout.Nodes[0]
+	gridWidth := float32(5)*diagramNodeW + float32(4)*diagramHGap
+	expectedRootX := (gridWidth - diagramNodeW) / 2
+	if root.X != expectedRootX {
+		t.Errorf("Root X = %v, want %v", root.X, expectedRootX)
+	}
+}

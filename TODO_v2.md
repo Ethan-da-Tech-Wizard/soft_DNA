@@ -108,7 +108,7 @@ a 10-minute scan is wasted.
 **Accept when:** wired to the mock binary it reports success with a rate;
 pointed at a missing file it reports that specific failure, in-dialog.
 
-## T4 — Built-in inference: bundle llama-cli, auto-detect models
+## T4 — Built-in inference: bundle llama-cli, auto-detect models ✅ DONE
 
 **Files:** `scripts/`, `Makefile`, `internal/gui/settings.go`,
 `internal/gui/settingsdialog.go`, README.
@@ -185,7 +185,7 @@ already exists for that).
 **Accept when:** a fixture with `.mypy_cache/junk.py` shows no trace of
 it in inventory, folders, diagram, or index.
 
-## T7 — Wrapping grid layout with the root always visible
+## T7 — Wrapping grid layout with the root always visible ✅ DONE
 
 **Files:** `internal/gui/diagramlayout.go` + tests (pure math — this is
 why layout was separated from rendering).
@@ -250,7 +250,7 @@ viewportH/layoutH, 1.0). One formula.
 
 # P2 — GUI performance on real projects
 
-## T11 — Fix the O(n²) log append
+## T11 — Fix the O(n²) log append ✅ DONE
 
 `appendLog` does `SetText(old + "\n" + line)` — every line copies the
 whole log and relayouts the label; a 500-line LLM scan does ~125k line

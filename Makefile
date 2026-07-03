@@ -1,4 +1,4 @@
-.PHONY: build build-gui test lint run run-gui smoke release clean
+.PHONY: build build-gui test lint run run-gui smoke release release-gui clean
 
 BINARY := codelens
 GUI_BINARY := codelens-gui
@@ -64,5 +64,19 @@ release:
 	@echo "generating checksums"
 	@cd dist && (sha256sum *.tar.gz *.zip > checksums.txt 2>/dev/null || shasum -a 256 *.tar.gz *.zip > checksums.txt 2>/dev/null || true)
 
+release-gui: build-gui
+	rm -rf dist-gui dist/$(GUI_BINARY)-*
+	mkdir -p dist-gui dist
+	CODELENS_BIN_DIR=dist-gui bash scripts/download_llama.sh
+	cp bin/$(GUI_BINARY) dist-gui/
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		(cd dist-gui && tar czf ../dist/$(GUI_BINARY)-$(VERSION)-darwin-$$(uname -m | sed 's/x86_64/x64/').tar.gz *); \
+	elif [ "$$(uname -s)" = "Linux" ]; then \
+		(cd dist-gui && tar czf ../dist/$(GUI_BINARY)-$(VERSION)-linux-$$(uname -m | sed 's/x86_64/x64/').tar.gz *); \
+	else \
+		(cd dist-gui && zip -q -r ../dist/$(GUI_BINARY)-$(VERSION)-windows-x64.zip *); \
+	fi
+	rm -rf dist-gui
+
 clean:
-	rm -rf bin dist codelens-out
+	rm -rf bin dist dist-gui codelens-out
