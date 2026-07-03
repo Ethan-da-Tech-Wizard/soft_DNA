@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // Settings holds user-configurable options persisted between runs, stored as
@@ -22,6 +23,10 @@ type Settings struct {
 	LLMModel    string `json:"llm_model"`
 	LLMThreads  int    `json:"llm_threads"`
 	LLMMaxFiles int    `json:"llm_max_files"` // 0 = uncapped, matching --llm-max-files
+
+	// LLMTimeoutSec is the per-call inference deadline in seconds.
+	// 0 = automatic, scaled by model size (see EffectiveLLMTimeout).
+	LLMTimeoutSec int `json:"llm_timeout_sec"`
 
 	// LastProject is the last folder scanned, restored into the path field
 	// on startup so reopening the app doesn't start from a blank slate.
@@ -62,6 +67,26 @@ func LoadSettings() Settings {
 		s.LLMThreads = defaults.LLMThreads
 	}
 	return s
+}
+
+// largeModelBytes is the model-file size above which the automatic timeout
+// assumes a big (≈7B) model: on CPU those generate a few tokens per second,
+// so one 512-token call can take minutes — far beyond the pipeline's old
+// 60s default, which made every call time out and the AI output empty.
+const largeModelBytes = 3 << 30 // 3 GiB
+
+// EffectiveLLMTimeout returns the per-call inference deadline to pass to the
+// pipeline: the user's explicit setting when present, otherwise a default
+// scaled by the model file's size (420s for large models, 120s for small
+// or unstat-able ones).
+func (s Settings) EffectiveLLMTimeout() time.Duration {
+	if s.LLMTimeoutSec > 0 {
+		return time.Duration(s.LLMTimeoutSec) * time.Second
+	}
+	if info, err := os.Stat(s.LLMModel); err == nil && info.Size() >= largeModelBytes {
+		return 420 * time.Second
+	}
+	return 120 * time.Second
 }
 
 // validateLLMConfig reports human-readable problems with s's LLM settings

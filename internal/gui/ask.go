@@ -54,6 +54,7 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 				LLMBinary:  a.settings.LLMBinary,
 				LLMModel:   a.settings.LLMModel,
 				LLMThreads: a.settings.LLMThreads,
+				LLMTimeout: a.settings.EffectiveLLMTimeout(),
 			})
 			fyne.Do(func() {
 				send.Enable()
