@@ -222,4 +222,3 @@ func parseAnswerStream(chunk []byte, state *int, keyBuf *string, escaped *bool, 
 		}
 	}
 }
-

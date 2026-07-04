@@ -211,7 +211,6 @@ func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes m
 	return out
 }
 
-
 // Extract extracts symbols from one file. Unsupported or unreadable files return no symbols.
 func Extract(root string, file scanner.FileInfo) []Symbol {
 	if file.Skipped || file.IsBinary {
