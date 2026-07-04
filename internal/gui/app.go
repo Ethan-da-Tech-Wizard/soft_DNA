@@ -175,11 +175,11 @@ func (a *App) runScan(root string) {
 	}}
 
 	opts := cli.PipelineOptions{
-		Root:        root,
-		OutDir:      filepath.Join(root, "codelens-out"),
-		LLMEnabled:  a.settings.LLMEnabled,
-		LLMBinary:   a.settings.LLMBinary,
-		LLMModel:    a.settings.LLMModel,
+		Root:               root,
+		OutDir:             filepath.Join(root, "codelens-out"),
+		LLMEnabled:         a.settings.LLMEnabled,
+		LLMBinary:          a.settings.LLMBinary,
+		LLMModel:           a.settings.LLMModel,
 		LLMThreads:         a.settings.LLMThreads,
 		LLMMaxFiles:        a.settings.LLMMaxFiles,
 		LLMTimeout:         a.settings.EffectiveLLMTimeout(),
@@ -297,4 +297,3 @@ func (a *App) updateWatcherState() {
 		}
 	}(a.watchDone)
 }
-
