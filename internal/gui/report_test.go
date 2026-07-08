@@ -61,7 +61,7 @@ func TestBuildReportTabsHasExpectedTabsInOrder(t *testing.T) {
 
 	want := []string{
 		"Summary", "Tech Stack", "Folders", "Entry Points",
-		"Functions & Classes", "Imports", "AI Summaries", "Diagram", "Ask",
+		"Functions & Classes", "Imports", "AI Summaries", "Diagram", "Architecture", "Ask",
 	}
 	if len(tabs.Items) != len(want) {
 		t.Fatalf("tab count = %d, want %d", len(tabs.Items), len(want))

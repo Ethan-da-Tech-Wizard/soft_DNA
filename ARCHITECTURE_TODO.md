@@ -18,13 +18,13 @@ Native Fyne only: no HTML, no webview, no browser, no localhost.
 
 ## 2. MVP scope
 
-- [ ] One new tab in the existing scan-results tab bar (`internal/gui/report.go`)
-- [ ] Draw a high-level diagram of the scanned project: entry points, top-level
+- [x] One new tab in the existing scan-results tab bar (`internal/gui/report.go`)
+- [x] Draw a high-level diagram of the scanned project: entry points, top-level
       folders/modules, detected stack, persisted outputs — roughly 10–25 shapes,
       not one per file
-- [ ] Arrows show the main relationships (entry point → module, module → data)
-- [ ] Click a shape → a side panel explains it (see §4)
-- [ ] Reuse the scan data already in `cli.PipelineResult` — no new analysis pass
+- [x] Arrows show the main relationships (entry point → module, module → data)
+- [x] Click a shape → a side panel explains it (see §4)
+- [x] Reuse the scan data already in `cli.PipelineResult` — no new analysis pass
 
 Out of scope for MVP: per-function graphs, automatic dependency inference
 beyond what the pipeline already knows, editing/moving shapes, export.
@@ -92,19 +92,25 @@ summaries, fall back to deterministic text (role, symbol counts, connections).
 
 ## 7. Implementation steps
 
-1. [ ] Define `ShapeKind` (rect/square/circle/oval/cylinder/cloud) and an
+1. [x] Define `ShapeKind` (rect/square/circle/oval/cylinder/cloud) and an
        `Explanation` struct (what it is, what it does, connections + kinds)
-2. [ ] Write a small builder: `cli.PipelineResult` → nodes/edges with shape
+       — `internal/gui/architecture.go` (`ArchNode`/`ArchEdge` carry the
+       explanation fields directly)
+2. [x] Write a small builder: `cli.PipelineResult` → nodes/edges with shape
        kinds and grounded explanation text (pure function, easily testable)
-3. [ ] Layout: reuse/extend `ComputeDiagramLayout`; keep it layered
-       (entry points top → modules middle → data/outputs bottom)
-4. [ ] Render shapes on a Fyne canvas (`canvas.Rectangle`, `canvas.Circle`,
-       `canvas.Line` for arrows; ovals/cylinders/clouds can be composed or
-       approximated in v1)
-5. [ ] Selection: highlight tapped shape, fill the explanation side panel
-6. [ ] Add the tab in `report.go`; verify with `make run-gui`
-7. [ ] Sanity-check by scanning CodeLens itself (`./bin/codelens-gui`, scan
-       this repo) — the diagram should describe cmd/ → internal/ → codelens-out/
+       — `BuildArchDiagram`
+3. [x] Layout: keep it layered (entry points top → modules middle →
+       data/outputs bottom) — `layoutArch`, reusing the Diagram tab's
+       spacing constants
+4. [x] Render shapes on a Fyne canvas (`canvas.Rectangle`, `canvas.Circle`,
+       `canvas.Line` for arrows; cylinders/clouds composed from
+       rectangle+ellipse / three ellipses) — `internal/gui/architectureview.go`
+5. [x] Selection: highlight tapped shape, fill the explanation side panel
+       (tap again or tap empty canvas to deselect)
+6. [x] Add the tab in `report.go` ("Architecture", after "Diagram")
+7. [x] Sanity-check by scanning CodeLens itself — headless self-scan produces
+       16 shapes/15 arrows describing cmd/ → internal/ → index → reports;
+       eyeball pass with `make run-gui` still worth doing on a desktop
 
 ## 8. Testing notes
 
@@ -129,4 +135,13 @@ summaries, fall back to deterministic text (role, symbol counts, connections).
 
 *Progress log (append below, newest first):*
 
+- 2026-07-08 — MVP implemented: `internal/gui/architecture.go` (model +
+  builder + layout, pure logic), `internal/gui/architectureview.go` (native
+  canvas shapes, arrows with heads, selection + explanation panel), new
+  "Architecture" tab in `report.go`. Tests in `architecture_test.go` cover
+  builder grounding, layered layout, connections, LLM enrichment, and a
+  real-pipeline scan of `testdata/sample_go`. Prerequisite fix: bumped Go to
+  1.25 (pinned x/sys and modernc.org/sqlite already required it, so the
+  module didn't build at 1.23). Remaining niceties: shape drill-down,
+  SVG export of this view, richer per-file circles.
 - 2026-07-08 — Document created. No implementation yet.
