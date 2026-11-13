@@ -1,37 +1,20 @@
 # CodeLens Local
 
-An offline codebase explorer that indexes source files, detects stacks, maps symbols, and produces architecture reports.
+CodeLens Local is a source-code exploration project written in Go. It is designed to index files, identify technologies and symbols, and help readers navigate a codebase and its architecture.
 
-**Status:** Developer tool  
-**Built with:** Go, SQLite, native GUI components
+**Status:** Developer-tool project. The current build, completeness of indexing, and optional features were not independently verified in this review.
 
-[Project guide](docs/PROJECT_GUIDE.md) · [Every file explained](docs/FILE_GUIDE.md) · [Licenses and dependencies](docs/LICENSE_REVIEW.md)
+## How it is organized
 
-## Start here
+- [cmd/](cmd/) contains entry points; [internal/](internal/) contains application components.
+- [go.mod](go.mod) declares the Go toolchain and dependencies, including Fyne and SQLite.
+- [PROJECT_NOTES.md](PROJECT_NOTES.md) retains detailed setup, usage, and architecture information.
+- [testdata/](testdata/) contains test inputs; tests do not by themselves establish coverage for every language or codebase.
 
-- [PROJECT_NOTES.md](PROJECT_NOTES.md) — Preserved detailed setup, usage, architecture, and development notes from the earlier README.
-- [go.mod](go.mod) — Go module identity, toolchain version, and dependency requirements; paired with go.sum for downloaded module checksums.
-- [cmd](cmd) — Project entry point and supporting files
-- [internal](internal) — Project entry point and supporting files
+The project distinguishes deterministic file and symbol indexing from optional local-model summaries. Review the notes and dependency requirements before building or running; runtime behavior and network isolation have not been established for every configuration.
 
-[Detailed setup, usage, and development notes](PROJECT_NOTES.md) preserve the previous project documentation.
-
-## Repository layout
-
-| Path | Role |
-| --- | --- |
-| [.github/](.github/) | GitHub workflow and contributor configuration (1 tracked entries). |
-| [cmd/](cmd/) | Project-specific cmd components (3 tracked entries). |
-| [docs/](docs/) | Project documentation, decisions, and reference material (5 tracked entries). |
-| [files/](files/) | Project-specific files components (12 tracked entries). |
-| [internal/](internal/) | Project-specific internal components (48 tracked entries). |
-| [scripts/](scripts/) | Build, launch, maintenance, and verification commands (2 tracked entries). |
-| [testdata/](testdata/) | Project-specific testdata components (30 tracked entries). |
-
-## Scope and current limits
-
-Optional local model-assisted summaries are distinct from deterministic symbol and file indexing. Upstream Go and GUI dependencies retain their own notices.
+[Project guide](docs/PROJECT_GUIDE.md) · [File guide](docs/FILE_GUIDE.md) · [License review](docs/LICENSE_REVIEW.md)
 
 ## License
 
-Original project code retains **MIT** terms in [LICENSE](LICENSE). Third-party libraries, media, data, models, and tools retain their own terms. See the [license review](docs/LICENSE_REVIEW.md) and [dependency inventory](docs/DEPENDENCIES.csv).
+Project code is distributed under the [MIT License](LICENSE). Dependencies and other assets retain their own terms; see the [license review](docs/LICENSE_REVIEW.md) and [dependency inventory](docs/DEPENDENCIES.csv).
