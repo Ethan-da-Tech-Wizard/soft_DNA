@@ -1,8 +1,8 @@
 # CodeLens Local
 
-> **A free, offline codebase explainer.** Point it at a project folder; it detects the tech stack, indexes the source, and generates a plain-English architecture report — without your code ever leaving your machine.
+> **A codebase exploration project.** It is designed to index source and generate architecture reports. Offline operation, network behavior, and privacy have not been independently verified across configurations.
 
-**Current release: v1.2.0** · Diagnostics & integrity gate complete (BRSL loop, source-grounded summaries, grounded `--ask`, hardened symbol extraction).
+**Historical release note: v1.2.0.** Diagnostics, indexing and source-grounded summaries are described below; current behavior has not been independently verified.
 
 ---
 
@@ -14,10 +14,10 @@
 - **SQLite/FTS5 index** for fast local keyword search
 - **Mermaid architecture diagram** written to `architecture.mmd`
 - **`--ask` mode** — answer a question about the codebase using indexed citations, no model needed
-- **Grounded `--ask`** (optional, offline) — combine `--ask` with `--llm` for a plain-English answer generated from retrieved source snippets, always cited, falling back to citations-only if the model fails
+- **Grounded `--ask`** (optional, offline) — combine `--ask` with `--llm` for a plain-English answer generated from retrieved source snippets, designed to cite retrieved snippets and fall back to citations-only if the model fails; this behavior has not been independently verified
 - **Hybrid LLM summaries** (optional, offline) — project overview + per-file annotations grounded in verified symbols and bounded source excerpts, with real-time loop diagnostics on stderr
 - **Native desktop app** (`codelens-gui`) — a real window with tabs, tables, a clickable architecture diagram, and a Q&A chat panel; no browser, no localhost, nothing to host
-- **Cross-platform** — static CGO-free binary for macOS, Linux, and Windows
+- **Cross-platform target** — the project describes CGO-free CLI builds for macOS, Linux and Windows; current binaries have not been independently verified.
 
 ---
 
@@ -129,9 +129,7 @@ codelens \
 | `--llm-timeout` | `60s` | Per-call subprocess deadline |
 | `--llm-max-files` | `10` | Maximum number of source files to annotate |
 
-The LLM pass is **fail-soft**: if inference fails for any file (timeout, parse
-error, hallucinated symbol name) the deterministic report is still written and a
-`warning:` line is printed to stderr. The `--llm` flag never blocks the run.
+The documented LLM pass is intended to continue with a warning when a file-level inference attempt fails. Failure handling and completion have not been independently verified.
 
 ---
 
@@ -164,7 +162,7 @@ Inside the window:
 - **Settings** — enable the local LLM pass, and point it at your `llama-cli`
   binary and `.gguf` model file with a native file picker. Settings are
   saved as plain JSON under your OS user config directory (e.g.
-  `~/.config/codelens/settings.json` on Linux) — nothing is ever uploaded.
+  `~/.config/codelens/settings.json` on Linux). Network behavior has not been independently verified.
 
 `codelens-gui` calls the exact same scan/index/diagram/LLM pipeline as the
 CLI (`internal/cli`'s exported `RunPipeline`/`Answer` functions) — it is a
@@ -172,7 +170,7 @@ front end over the same code, not a reimplementation, and it writes the
 same `CODEBASE_REPORT.md`, `architecture.mmd`, `codelens.db`, and
 `ANSWER.md` files to `<project>/codelens-out/` alongside the interactive
 view. If a local LLM subprocess is needed, `codelens-gui` launches and owns
-it internally — you never start, see, or manage a server yourself.
+it internally according to the project documentation.
 
 ### Building `codelens-gui` from source
 
@@ -272,24 +270,18 @@ cd dist && shasum -a 256 -c checksums.txt
 
 ## Safety Guardrails
 
-CodeLens Local never:
-
-- Executes or imports code from the scanned project
-- Makes network calls during analysis
-- Follows symlinks outside the scanned root
+The project describes restrictions intended to avoid executing scanned code, making network calls during analysis, or following symlinks outside the scanned root. These protections and their coverage have not been independently verified; do not treat them as guarantees.
 
 The `codelens` CLI additionally builds with `CGO_ENABLED=0` (a fully static,
 dependency-free binary). `codelens-gui` is the one exception to that: a
 native desktop GUI toolkit requires CGO to link against your OS's windowing
-libraries, so that binary alone is not CGO-free — it makes exactly the same
-guarantees above (no code execution, no network calls, no symlink escapes)
+libraries, so that binary alone is not CGO-free. Its documented intended
+restrictions are described above, but have not been independently verified
 and reuses the CLI's own pipeline code, but it is a dynamically linked
 executable rather than a static one.
 
 The optional LLM pass runs a separately-installed local binary
-(`llama-cli`) as a subprocess — the scanned project's code is never passed
-to any remote endpoint. Both the CLI and the desktop app launch and own this
-subprocess internally; neither ever starts a server or opens a network port.
+(`llama-cli`) as a subprocess. The project describes local operation; network and subprocess behavior should be independently checked for the configuration used.
 
 ---
 
