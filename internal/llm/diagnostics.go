@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagnostics.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tracks the counters of the boundary-safe summarization loop (turn, coverage, throttle, health, stall) and prints one diagnostic line per turn.
+
 // Boundary-safe summarization loop (BRSL) diagnostics.
 //
 // LoopState implements the state vector S = (Σ, p, ρ) and update rules from

@@ -1,3 +1,8 @@
+// Program: soft_DNA - structure_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests folder-role and entry-point detection against the sample projects and the per-language entry-point naming rules.
+
 package structure
 
 import (
@@ -8,6 +13,7 @@ import (
 	"codelens-local/internal/scanner"
 )
 
+// TestAnalyzeFindsPythonEntryPoint checks the root folder and Python main-script entry point of the sample Python project.
 func TestAnalyzeFindsPythonEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -26,6 +32,7 @@ func TestAnalyzeFindsPythonEntryPoint(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsNodeEntryPoint checks the src folder role and the frontend main module entry point of the sample Node project.
 func TestAnalyzeFindsNodeEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -44,6 +51,7 @@ func TestAnalyzeFindsNodeEntryPoint(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsGoCmdEntryPoint checks that cmd/app/main.go in the sample Go project is reported as an entry point.
 func TestAnalyzeFindsGoCmdEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_go")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -59,6 +67,7 @@ func TestAnalyzeFindsGoCmdEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonRuby checks the reason text returned for Ruby entry-point file names.
 func TestEntryReasonRuby(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -75,6 +84,7 @@ func TestEntryReasonRuby(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsRubyEntryPoint checks that a Ruby main file is reported with its Ruby entry-point reason.
 func TestAnalyzeFindsRubyEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_ruby")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -96,6 +106,7 @@ func TestAnalyzeFindsRubyEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonSQL checks the reason text returned for SQL initialisation file names.
 func TestEntryReasonSQL(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -112,6 +123,7 @@ func TestEntryReasonSQL(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsSQLEntryPoint checks that schema.sql is reported with its SQL entry-point reason.
 func TestAnalyzeFindsSQLEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_sql")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -133,6 +145,7 @@ func TestAnalyzeFindsSQLEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonSwift checks the reason text returned for Swift entry-point file names.
 func TestEntryReasonSwift(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -149,6 +162,7 @@ func TestEntryReasonSwift(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsSwiftEntryPoint checks that main.swift is reported with its Swift entry-point reason.
 func TestAnalyzeFindsSwiftEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_swift")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -170,6 +184,7 @@ func TestAnalyzeFindsSwiftEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonR checks the reason text returned for R script entry-point file names.
 func TestEntryReasonR(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -186,6 +201,7 @@ func TestEntryReasonR(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsREntryPoint checks that main.R is reported with its R entry-point reason.
 func TestAnalyzeFindsREntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_r")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -207,6 +223,7 @@ func TestAnalyzeFindsREntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonRust checks the reason text returned for Rust entry-point file names.
 func TestEntryReasonRust(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -223,6 +240,7 @@ func TestEntryReasonRust(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsRustEntryPoint checks that src/main.rs is reported with its Rust entry-point reason.
 func TestAnalyzeFindsRustEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_rust")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -244,6 +262,7 @@ func TestAnalyzeFindsRustEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonC checks the reason text returned for C entry-point file names.
 func TestEntryReasonC(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -260,6 +279,7 @@ func TestEntryReasonC(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsCEntryPoint checks that main.c is reported with its C entry-point reason.
 func TestAnalyzeFindsCEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_c")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -281,6 +301,7 @@ func TestAnalyzeFindsCEntryPoint(t *testing.T) {
 	}
 }
 
+// TestEntryReasonCPP checks the reason text returned for C++ entry-point file names.
 func TestEntryReasonCPP(t *testing.T) {
 	cases := []struct {
 		path   string
@@ -301,6 +322,7 @@ func TestEntryReasonCPP(t *testing.T) {
 	}
 }
 
+// TestAnalyzeFindsCPPEntryPoint checks that main.cpp is reported with its C++ entry-point reason.
 func TestAnalyzeFindsCPPEntryPoint(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_cpp")
 	files, err := scanner.Scan(root, scanner.Options{})

@@ -1,3 +1,8 @@
+// Program: soft_DNA - runner_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the llm package: the output size limiter, Run's argument checks (missing binary or model), embedded grammar extraction, and the streaming answer parser.
+
 package llm
 
 import (
@@ -10,6 +15,7 @@ import (
 
 // ---- limitedWriter unit tests ----
 
+// TestLimitedWriterBelowLimit checks that writes under the limit are stored in full.
 func TestLimitedWriterBelowLimit(t *testing.T) {
 	w := &limitedWriter{limit: 100}
 	payload := []byte("hello world")
@@ -25,6 +31,7 @@ func TestLimitedWriterBelowLimit(t *testing.T) {
 	}
 }
 
+// TestLimitedWriterExceedsLimitInOneWrite checks that a single write over the limit fails with an error that names the limit.
 func TestLimitedWriterExceedsLimitInOneWrite(t *testing.T) {
 	w := &limitedWriter{limit: 5}
 	_, err := w.Write([]byte("hello world")) // 11 bytes > limit 5
@@ -39,6 +46,7 @@ func TestLimitedWriterExceedsLimitInOneWrite(t *testing.T) {
 	}
 }
 
+// TestLimitedWriterExactLimitThenOneByte checks that writing exactly the limit succeeds and one more byte fails.
 func TestLimitedWriterExactLimitThenOneByte(t *testing.T) {
 	// Writing exactly `limit` bytes must succeed; the next byte must fail.
 	w := &limitedWriter{limit: 5}
@@ -50,6 +58,7 @@ func TestLimitedWriterExactLimitThenOneByte(t *testing.T) {
 	}
 }
 
+// TestLimitedWriterAccumulatesAcrossMultipleWrites checks that the limit applies to the running total of several writes.
 func TestLimitedWriterAccumulatesAcrossMultipleWrites(t *testing.T) {
 	w := &limitedWriter{limit: 11}
 	for _, chunk := range []string{"hello", " ", "world"} {
@@ -66,6 +75,7 @@ func TestLimitedWriterAccumulatesAcrossMultipleWrites(t *testing.T) {
 	}
 }
 
+// TestLimitedWriterErrorSticksAfterFirstFailure checks that once the limit is crossed every later write also fails.
 func TestLimitedWriterErrorSticksAfterFirstFailure(t *testing.T) {
 	// Once the limit is crossed, every subsequent Write must also fail.
 	w := &limitedWriter{limit: 3}
@@ -77,6 +87,7 @@ func TestLimitedWriterErrorSticksAfterFirstFailure(t *testing.T) {
 	}
 }
 
+// TestLimitedWriterZeroLimit checks that a zero limit rejects non-empty writes.
 func TestLimitedWriterZeroLimit(t *testing.T) {
 	// A zero-byte limit must reject every write, including empty slices
 	// (well, an empty slice has len=0 and 0+0 > 0 is false, so it passes).
@@ -89,6 +100,7 @@ func TestLimitedWriterZeroLimit(t *testing.T) {
 
 // ---- Run() unit tests ----
 
+// TestRunMissingBinary checks that Run reports a clear error when the binary path does not exist.
 func TestRunMissingBinary(t *testing.T) {
 	cfg := Config{
 		BinaryPath:     "/nonexistent/llama-cli",
@@ -108,6 +120,7 @@ func TestRunMissingBinary(t *testing.T) {
 	}
 }
 
+// TestRunMissingModel checks that Run reports a clear error when the model path does not exist.
 func TestRunMissingModel(t *testing.T) {
 	// /bin/sh is guaranteed to exist on any POSIX system; we use it only to
 	// satisfy the BinaryPath stat check. The function returns before attempting
@@ -130,6 +143,7 @@ func TestRunMissingModel(t *testing.T) {
 	}
 }
 
+// TestRunMissingBinaryTakesPrecedenceOverMissingModel checks that the binary is checked before the model when both are missing.
 func TestRunMissingBinaryTakesPrecedenceOverMissingModel(t *testing.T) {
 	// BinaryPath is checked before ModelPath; both missing → binary error wins.
 	cfg := Config{
@@ -147,6 +161,7 @@ func TestRunMissingBinaryTakesPrecedenceOverMissingModel(t *testing.T) {
 	}
 }
 
+// TestRunZeroTimeoutDoesNotBlock checks that a zero timeout (no deadline) does not stop Run from returning its missing-binary error immediately.
 func TestRunZeroTimeoutDoesNotBlock(t *testing.T) {
 	// Timeout=0 disables the deadline. This test only checks the stat path
 	// (binary missing), so it returns instantly regardless of Timeout value.
@@ -162,6 +177,7 @@ func TestRunZeroTimeoutDoesNotBlock(t *testing.T) {
 	}
 }
 
+// TestWriteGrammar checks that an embedded grammar is written to a temporary file that is removed by the cleanup function.
 func TestWriteGrammar(t *testing.T) {
 	path, cleanup, err := WriteGrammar("file_explain.gbnf")
 	if err != nil {
@@ -188,6 +204,7 @@ func TestWriteGrammar(t *testing.T) {
 	}
 }
 
+// TestStreamingAskParser checks that parseAnswerStream extracts the answer text from streamed JSON.
 func TestStreamingAskParser(t *testing.T) {
 	input := `{"answer": "Hello \"World\"\nLine 2"}`
 	state := 0

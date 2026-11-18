@@ -1,3 +1,8 @@
+// Program: soft_DNA - ignore.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Implements the ignore matcher used by the scanner, combining .gitignore-style patterns from the project with extra caller-supplied patterns.
+
 package scanner
 
 import (
@@ -6,8 +11,10 @@ import (
 	"strings"
 )
 
+// ignoreMatcher is the ordered list of ignore patterns; a path is ignored when any pattern matches.
 type ignoreMatcher []string
 
+// newIgnoreMatcher combines the root's .gitignore patterns with the extra patterns supplied by the caller.
 func newIgnoreMatcher(root string, extra []string) ignoreMatcher {
 	var patterns []string
 	patterns = append(patterns, readGitignore(root)...)
@@ -15,6 +22,7 @@ func newIgnoreMatcher(root string, extra []string) ignoreMatcher {
 	return ignoreMatcher(patterns)
 }
 
+// readGitignore returns the patterns from root's .gitignore, skipping blank lines, comments and negation lines (which this matcher does not support); a missing file yields none.
 func readGitignore(root string) []string {
 	data, err := os.ReadFile(filepath.Join(root, ".gitignore"))
 	if err != nil {
@@ -32,6 +40,7 @@ func readGitignore(root string) []string {
 	return patterns
 }
 
+// match reports whether the path rel (base is its final element) is ignored by any pattern.
 func (m ignoreMatcher) match(rel, base string, isDir bool) bool {
 	rel = filepath.ToSlash(rel)
 	for _, pattern := range m {
@@ -42,6 +51,7 @@ func (m ignoreMatcher) match(rel, base string, isDir bool) bool {
 	return false
 }
 
+// matchPattern tests one pattern: a trailing slash limits it to directories (and files below them), a pattern without a slash is matched against the base name, and other patterns against the whole relative path or a directory prefix of it.
 func matchPattern(pattern, rel, base string, isDir bool) bool {
 	pattern = strings.TrimSpace(filepath.ToSlash(pattern))
 	if pattern == "" {

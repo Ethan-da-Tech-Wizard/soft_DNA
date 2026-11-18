@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagram_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests that WriteMermaid produces a flowchart containing the root, stack branch and entry-point node for the sample Node project.
+
 package diagram
 
 import (
@@ -11,6 +16,7 @@ import (
 	"codelens-local/internal/structure"
 )
 
+// TestWriteMermaid scans the sample Node fixture, writes the diagram to a temp folder, and checks for the expected Mermaid lines.
 func TestWriteMermaid(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	files, err := scanner.Scan(root, scanner.Options{})

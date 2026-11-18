@@ -1,3 +1,8 @@
+// Program: soft_DNA - architectureview.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Draws the Architecture Explainer tab natively in Fyne: clickable shapes and arrows on a canvas, plus a side panel that explains the selected shape.
+
 package gui
 
 // Native Fyne rendering for the Architecture Explainer tab. All content
@@ -19,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// archColorCloud is the slate fill used for shapes that stand for outside dependencies.
 var archColorCloud = color.RGBA{R: 148, G: 163, B: 184, A: 255} // Slate
 
 // archShapeColor gives each shape kind a stable fill so the legend, canvas,
@@ -46,6 +52,7 @@ func (a *App) newArchitectureTab(res cli.PipelineResult) fyne.CanvasObject {
 	d := BuildArchDiagram(res)
 
 	scale := float32(1.0)
+	// selectedID is the currently highlighted shape (empty when nothing is selected).
 	selectedID := ""
 
 	view := container.NewStack()
@@ -246,18 +253,21 @@ type archShapeWidget struct {
 	onTap    func()
 }
 
+// newArchShapeWidget creates a tappable shape for node n at the given zoom, drawn highlighted when selected.
 func newArchShapeWidget(n ArchNode, scale float32, selected bool, onTap func()) *archShapeWidget {
 	w := &archShapeWidget{node: n, scale: scale, selected: selected, onTap: onTap}
 	w.ExtendBaseWidget(w)
 	return w
 }
 
+// Tapped runs the tap handler (select this shape), if one was provided.
 func (w *archShapeWidget) Tapped(*fyne.PointEvent) {
 	if w.onTap != nil {
 		w.onTap()
 	}
 }
 
+// CreateRenderer builds the canvas parts for the node's shape (ellipse, cylinder, cloud of three puffs, or rectangle) plus its text label.
 func (w *archShapeWidget) CreateRenderer() fyne.WidgetRenderer {
 	fill := archShapeColor(w.node.Shape)
 	strokeColor := theme.Color(theme.ColorNameSeparator)
@@ -305,14 +315,17 @@ func (w *archShapeWidget) CreateRenderer() fyne.WidgetRenderer {
 	return &archShapeRenderer{widget: w, parts: parts, label: label}
 }
 
+// archShapeRenderer positions and draws the parts of an archShapeWidget.
 type archShapeRenderer struct {
 	widget *archShapeWidget
 	parts  []fyne.CanvasObject
 	label  *canvas.Text
 }
 
+// Destroy has nothing to release because the canvas objects are garbage collected.
 func (r *archShapeRenderer) Destroy() {}
 
+// Layout sizes the shape pieces for the node's shape kind and positions the text label.
 func (r *archShapeRenderer) Layout(size fyne.Size) {
 	switch r.widget.node.Shape {
 	case ShapeCylinder:
@@ -343,14 +356,17 @@ func (r *archShapeRenderer) Layout(size fyne.Size) {
 	r.label.Move(fyne.NewPos(4, labelY))
 }
 
+// MinSize is the node's layout size multiplied by the current zoom.
 func (r *archShapeRenderer) MinSize() fyne.Size {
 	return fyne.NewSize(r.widget.node.W*r.widget.scale, r.widget.node.H*r.widget.scale)
 }
 
+// Objects returns a fresh slice of the shape parts followed by the label, in paint order.
 func (r *archShapeRenderer) Objects() []fyne.CanvasObject {
 	return append(append([]fyne.CanvasObject{}, r.parts...), r.label)
 }
 
+// Refresh redraws every shape part and the label.
 func (r *archShapeRenderer) Refresh() {
 	for _, p := range r.parts {
 		p.Refresh()
@@ -365,18 +381,21 @@ type archTapCatcher struct {
 	onTap func()
 }
 
+// newArchTapCatcher creates the invisible background widget that reports taps on empty space.
 func newArchTapCatcher(onTap func()) *archTapCatcher {
 	w := &archTapCatcher{onTap: onTap}
 	w.ExtendBaseWidget(w)
 	return w
 }
 
+// Tapped runs the tap handler (clear the selection), if one was provided.
 func (w *archTapCatcher) Tapped(*fyne.PointEvent) {
 	if w.onTap != nil {
 		w.onTap()
 	}
 }
 
+// CreateRenderer draws a fully transparent rectangle so the widget receives taps but shows nothing.
 func (w *archTapCatcher) CreateRenderer() fyne.WidgetRenderer {
 	bg := canvas.NewRectangle(color.Transparent)
 	return widget.NewSimpleRenderer(bg)

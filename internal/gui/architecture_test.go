@@ -1,3 +1,8 @@
+// Program: soft_DNA - architecture_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the Architecture Explainer model and widgets: shapes, edges, layered layout, empty projects, LLM summaries, connections, headless tab creation and tap handling.
+
 package gui
 
 import (
@@ -13,6 +18,7 @@ import (
 	"codelens-local/internal/validate"
 )
 
+// sampleResult builds a small in-memory pipeline result (a few files, one skipped, folders, an entry point and symbols) shared by the tests.
 func sampleResult() cli.PipelineResult {
 	return cli.PipelineResult{
 		Root:   "/home/user/myproject",
@@ -42,6 +48,7 @@ func sampleResult() cli.PipelineResult {
 	}
 }
 
+// nodeShape returns the node with the given ID, failing the test if it is missing.
 func nodeShape(t *testing.T, d ArchDiagram, id string) ArchNode {
 	t.Helper()
 	n, ok := d.NodeByID(id)
@@ -51,6 +58,7 @@ func nodeShape(t *testing.T, d ArchDiagram, id string) ArchNode {
 	return n
 }
 
+// TestBuildArchDiagramShapesAndEdges checks the shape chosen for the entry point and the project, grounded explanation text, and the expected edges.
 func TestBuildArchDiagramShapesAndEdges(t *testing.T) {
 	d := BuildArchDiagram(sampleResult())
 
@@ -141,6 +149,7 @@ func TestBuildArchDiagramShapesAndEdges(t *testing.T) {
 	wantEdge(archIndexID, archOutputsID, ConnOutput)
 }
 
+// TestBuildArchDiagramLayeredLayout checks that every node has a size, lies inside the diagram, and that entry points sit above the project, which sits above the modules.
 func TestBuildArchDiagramLayeredLayout(t *testing.T) {
 	d := BuildArchDiagram(sampleResult())
 
@@ -176,6 +185,7 @@ func TestBuildArchDiagramLayeredLayout(t *testing.T) {
 	}
 }
 
+// TestBuildArchDiagramEmptyProject checks that an empty scan still has a project node, no symbols node, and no edges pointing at missing nodes.
 func TestBuildArchDiagramEmptyProject(t *testing.T) {
 	d := BuildArchDiagram(cli.PipelineResult{Root: "/tmp/empty", OutDir: "/tmp/empty/codelens-out"})
 
@@ -195,6 +205,7 @@ func TestBuildArchDiagramEmptyProject(t *testing.T) {
 	}
 }
 
+// TestBuildArchDiagramUsesLLMSummaryWhenPresent checks that a validated LLM file summary becomes the entry point's explanation.
 func TestBuildArchDiagramUsesLLMSummaryWhenPresent(t *testing.T) {
 	res := sampleResult()
 	res.LLM = cli.LLMResult{
@@ -209,6 +220,7 @@ func TestBuildArchDiagramUsesLLMSummaryWhenPresent(t *testing.T) {
 	}
 }
 
+// TestConnectionsFor checks that a node lists incoming and outgoing connections with reasons, and that an unknown ID has none.
 func TestConnectionsFor(t *testing.T) {
 	d := BuildArchDiagram(sampleResult())
 
@@ -237,12 +249,14 @@ func TestConnectionsFor(t *testing.T) {
 	}
 }
 
+// TestNewArchitectureTabBuildsHeadlessly checks that the tab can be constructed without a running window.
 func TestNewArchitectureTabBuildsHeadlessly(t *testing.T) {
 	if got := (&App{}).newArchitectureTab(sampleResult()); got == nil {
 		t.Fatal("newArchitectureTab returned nil")
 	}
 }
 
+// TestArchShapeWidgetTapReportsID checks that tapping a shape calls its handler with that shape's ID.
 func TestArchShapeWidgetTapReportsID(t *testing.T) {
 	tapped := ""
 	n := ArchNode{ID: "arch_folder_app", Label: "app", Shape: ShapeRectangle, W: 180, H: 44}
@@ -297,6 +311,7 @@ func TestBuildArchDiagramFromRealScan(t *testing.T) {
 	}
 }
 
+// TestArchTopFolder checks that archTopFolder returns the first path component, or "." for root-level files.
 func TestArchTopFolder(t *testing.T) {
 	cases := map[string]string{
 		"main.go":            ".",

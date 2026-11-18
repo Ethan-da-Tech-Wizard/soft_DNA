@@ -1,3 +1,8 @@
+// Program: soft_DNA - structure.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Derives a friendly role for each top-level folder and a list of likely entry-point files from the scanned inventory.
+
 // Package structure derives simple folder roles and entry points.
 package structure
 
@@ -29,6 +34,7 @@ func Analyze(files []scanner.FileInfo) ([]Folder, []EntryPoint) {
 	return folders, entries
 }
 
+// folders counts the non-skipped files under each top-level folder ("." for the root) and returns them sorted by path with their roles.
 func folders(files []scanner.FileInfo) []Folder {
 	counts := map[string]int{}
 	for _, file := range files {
@@ -53,6 +59,7 @@ func folders(files []scanner.FileInfo) []Folder {
 	return out
 }
 
+// topFolder returns the first directory component of path, or "." for files at the project root.
 func topFolder(path string) string {
 	dir := filepath.ToSlash(filepath.Dir(path))
 	if dir == "." {
@@ -100,6 +107,7 @@ func RoleFor(folder string) string {
 	}
 }
 
+// entryPoints returns the non-skipped files that match a known entry-point naming convention, sorted by path.
 func entryPoints(files []scanner.FileInfo) []EntryPoint {
 	var entries []EntryPoint
 	for _, file := range files {
@@ -116,6 +124,7 @@ func entryPoints(files []scanner.FileInfo) []EntryPoint {
 	return entries
 }
 
+// entryReason returns a short explanation when path follows a well-known entry-point convention (for example a main file for a language), or an empty string if it does not.
 func entryReason(path string) string {
 	base := filepath.Base(path)
 	switch {

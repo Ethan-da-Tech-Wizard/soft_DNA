@@ -1,3 +1,8 @@
+// Program: soft_DNA - scanner.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Walks a project folder and builds a sorted inventory of files (size, line count, language, content hash), skipping ignored, oversized, binary and unsafe entries without running any project code.
+
 // Package scanner inventories source files without executing target code.
 package scanner
 
@@ -13,8 +18,10 @@ import (
 	"strings"
 )
 
+// defaultMaxFileSize is the largest file (2 MiB) that is read when the caller sets no limit.
 const defaultMaxFileSize int64 = 2 * 1024 * 1024
 
+// defaultIgnoredDirs lists directory names that are never entered, such as version control, caches, virtual environments and build output.
 var defaultIgnoredDirs = map[string]struct{}{
 	".cache":        {},
 	".claude":       {},
@@ -78,6 +85,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 		return nil, errors.New("root is not a directory")
 	}
 
+	// Walk the tree; read errors are recorded as skipped entries instead of stopping the scan.
 	ignore := newIgnoreMatcher(absRoot, opts.Ignore)
 	var files []FileInfo
 
@@ -112,6 +120,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 			return nil
 		}
 
+		// Symlinks get their own handling so a link can never lead the scan outside the root.
 		if info.Mode()&os.ModeSymlink != 0 {
 			files = append(files, scanSymlink(absRoot, path, rel, opts.MaxFileSize))
 			return nil
@@ -124,6 +133,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 		return nil, err
 	}
 
+	// Sort by path so the inventory is the same on every run.
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Path < files[j].Path
 	})
@@ -131,6 +141,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 	return files, nil
 }
 
+// shouldSkipDir reports whether a directory is never entered: it is in the default list or matches an ignore pattern.
 func shouldSkipDir(rel, name string, ignore ignoreMatcher) bool {
 	if _, ok := defaultIgnoredDirs[name]; ok {
 		return true
@@ -138,6 +149,7 @@ func shouldSkipDir(rel, name string, ignore ignoreMatcher) bool {
 	return ignore.match(rel, name, true)
 }
 
+// scanRegularFile records one file, marking it skipped when it is too large, unreadable or binary, and otherwise computing its SHA-256 hash and line count.
 func scanRegularFile(absRoot, path, rel string, info fs.FileInfo, maxFileSize int64) FileInfo {
 	file := baseInfo(rel, info.Size())
 	if info.Size() > maxFileSize {
@@ -166,6 +178,7 @@ func scanRegularFile(absRoot, path, rel string, info fs.FileInfo, maxFileSize in
 	return file
 }
 
+// scanSymlink resolves a link and scans its target only when the target is a file inside the root; unresolved, escaping and directory links are recorded as skipped.
 func scanSymlink(absRoot, path, rel string, maxFileSize int64) FileInfo {
 	file := baseInfo(rel, 0)
 	target, err := filepath.EvalSymlinks(path)
@@ -194,6 +207,7 @@ func scanSymlink(absRoot, path, rel string, maxFileSize int64) FileInfo {
 	return scanRegularFile(absRoot, target, rel, info, maxFileSize)
 }
 
+// skippedInfo builds a skipped entry with the given reason for a path that could not be processed.
 func skippedInfo(absRoot, path, reason string) FileInfo {
 	file := baseInfo(cleanRel(absRoot, path), 0)
 	file.Skipped = true
@@ -201,6 +215,7 @@ func skippedInfo(absRoot, path, reason string) FileInfo {
 	return file
 }
 
+// baseInfo creates a FileInfo with the path, lower-cased extension, size and detected language filled in.
 func baseInfo(rel string, size int64) FileInfo {
 	ext := strings.ToLower(filepath.Ext(rel))
 	return FileInfo{
@@ -211,6 +226,7 @@ func baseInfo(rel string, size int64) FileInfo {
 	}
 }
 
+// cleanRel returns path relative to absRoot using forward slashes.
 func cleanRel(absRoot, path string) string {
 	rel, err := filepath.Rel(absRoot, path)
 	if err != nil {
@@ -219,6 +235,7 @@ func cleanRel(absRoot, path string) string {
 	return filepath.ToSlash(rel)
 }
 
+// isInside reports whether target is absRoot itself or lies below it.
 func isInside(absRoot, target string) bool {
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
@@ -231,6 +248,7 @@ func isInside(absRoot, target string) bool {
 	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
 
+// isBinary treats data as binary when its first 8000 bytes contain a zero byte.
 func isBinary(data []byte) bool {
 	sample := data
 	if len(sample) > 8000 {
@@ -239,6 +257,7 @@ func isBinary(data []byte) bool {
 	return bytes.IndexByte(sample, 0) >= 0
 }
 
+// lineCount counts lines, including a final line that has no trailing newline.
 func lineCount(data []byte) int {
 	if len(data) == 0 {
 		return 0
@@ -250,6 +269,7 @@ func lineCount(data []byte) int {
 	return lines
 }
 
+// detectLanguage maps a file extension, or for some files its exact name, to a language label, or "Unknown".
 func detectLanguage(ext, base string) string {
 	switch ext {
 	case ".go":

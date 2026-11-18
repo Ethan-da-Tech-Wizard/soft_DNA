@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagramexport.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Exports a computed diagram layout as a standalone SVG file using the same colours and box sizes as the on-screen canvas.
+
 package gui
 
 import (
@@ -11,6 +16,7 @@ import (
 // matches what the user sees on screen. No external dependencies — just stdlib
 // fmt / strings / os.
 func ExportDiagramSVG(layout DiagramLayout, svgPath string) error {
+	// pad is the empty margin around the drawing; fall back to a default canvas size for an empty layout.
 	const pad = float32(20) // margin around the whole drawing
 	w := layout.Width + 2*pad
 	h := layout.Height + 2*pad
@@ -21,13 +27,14 @@ func ExportDiagramSVG(layout DiagramLayout, svgPath string) error {
 		h = 200
 	}
 
+	// Build the SVG text in memory, then write it to disk in one go at the end.
 	var sb strings.Builder
 
 	fmt.Fprintf(&sb, `<?xml version="1.0" encoding="UTF-8"?>`+"\n")
 	fmt.Fprintf(&sb, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%.0f" viewBox="0 0 %.0f %.0f">`+"\n",
 		w, h, w, h)
 
-	// White background
+	// Dark background fill
 	fmt.Fprintf(&sb, `  <rect width="%.0f" height="%.0f" fill="#1e1e2e"/>%s`, w, h, "\n")
 
 	// Build a quick node-ID → center lookup for edge routing
@@ -88,6 +95,7 @@ func ExportDiagramSVG(layout DiagramLayout, svgPath string) error {
     </marker>
   </defs>` + "\n"
 	// Prepend defs after opening svg tag — simplest: insert before first <rect
+	// Insert the arrowhead marker definition before the first rect and close the document.
 	content := sb.String()
 	content = strings.Replace(content, "<rect", arrow+"  <rect", 1)
 	content += "</svg>\n"

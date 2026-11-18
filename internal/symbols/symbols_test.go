@@ -1,3 +1,8 @@
+// Program: soft_DNA - symbols_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests symbol extraction for every supported language, including multi-line signatures, decorators, false-positive rejection, malformed input, incremental reuse, and a benchmark.
+
 package symbols
 
 import (
@@ -11,6 +16,7 @@ import (
 	"codelens-local/internal/scanner"
 )
 
+// TestExtractPythonSymbols checks the symbols found in the sample Python fixture.
 func TestExtractPythonSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -25,6 +31,7 @@ func TestExtractPythonSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractTypeScriptSymbols checks the symbols found in the sample TypeScript fixture.
 func TestExtractTypeScriptSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -39,6 +46,7 @@ func TestExtractTypeScriptSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractGoSymbols checks the symbols found in the sample Go fixture.
 func TestExtractGoSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_go")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -53,6 +61,7 @@ func TestExtractGoSymbols(t *testing.T) {
 	}
 }
 
+// TestMalformedFileDoesNotCrash checks that a syntactically broken file is handled without crashing.
 func TestMalformedFileDoesNotCrash(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "edge_cases")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -63,6 +72,7 @@ func TestMalformedFileDoesNotCrash(t *testing.T) {
 	_ = ExtractAll(root, files)
 }
 
+// TestExtractSQLSymbols checks that tables, views and procedures are found in SQL source.
 func TestExtractSQLSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_sql")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -88,6 +98,7 @@ func TestExtractSQLSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractSwiftSymbols checks that imports, types and functions are found in Swift source.
 func TestExtractSwiftSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_swift")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -114,6 +125,7 @@ func TestExtractSwiftSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractRSymbols checks that imports and functions are found in R source.
 func TestExtractRSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_r")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -139,6 +151,7 @@ func TestExtractRSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractRubySymbols checks that imports, methods and classes are found in Ruby source.
 func TestExtractRubySymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_ruby")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -165,6 +178,7 @@ func TestExtractRubySymbols(t *testing.T) {
 	}
 }
 
+// TestExtractRustSymbols checks that imports, functions and types are found in Rust source.
 func TestExtractRustSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_rust")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -190,6 +204,7 @@ func TestExtractRustSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractCSymbols checks that includes, types and functions are found in C source.
 func TestExtractCSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_c")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -216,6 +231,7 @@ func TestExtractCSymbols(t *testing.T) {
 	}
 }
 
+// TestExtractCPPSymbols checks that includes, classes and functions are found in C++ source.
 func TestExtractCPPSymbols(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_cpp")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -244,6 +260,7 @@ func TestExtractCPPSymbols(t *testing.T) {
 	}
 }
 
+// names returns the Name of each symbol, in order.
 func names(items []Symbol) []string {
 	out := make([]string, 0, len(items))
 	for _, item := range items {
@@ -273,6 +290,7 @@ func writeFixture(t *testing.T, name, src string) (string, scanner.FileInfo) {
 	return "", scanner.FileInfo{}
 }
 
+// TestExtractPythonMultilineAndDecorators checks that decorators are not reported as symbols and that a def whose parameters span several lines is joined into one signature with the right line range.
 func TestExtractPythonMultilineAndDecorators(t *testing.T) {
 	src := `import os
 
@@ -318,6 +336,7 @@ class Config:
 	}
 }
 
+// TestExtractJSMultilineFunction checks that a JavaScript function declared over several lines becomes one symbol with a joined signature.
 func TestExtractJSMultilineFunction(t *testing.T) {
 	src := `export async function fetchData(url,
                                  options,
@@ -339,6 +358,7 @@ func TestExtractJSMultilineFunction(t *testing.T) {
 	}
 }
 
+// TestExtractRustAttributesAndMultiline checks that Rust attributes are ignored and that multi-line function signatures are joined with the right line range.
 func TestExtractRustAttributesAndMultiline(t *testing.T) {
 	src := `use std::fmt;
 
@@ -377,6 +397,7 @@ pub fn add(
 	}
 }
 
+// TestExtractCRejectsStatementsAndPrototypes checks that C statements and prototypes are not reported as function definitions.
 func TestExtractCRejectsStatementsAndPrototypes(t *testing.T) {
 	src := `#include <stdio.h>
 
@@ -402,6 +423,7 @@ int mul(int a, int b) {
 	}
 }
 
+// TestExtractCPPRejectsStatements checks that C++ statements are not reported as symbols.
 func TestExtractCPPRejectsStatements(t *testing.T) {
 	src := `#include <vector>
 
@@ -429,6 +451,7 @@ int compute(int value) {
 	}
 }
 
+// BenchmarkExtractAll measures how long ExtractAll takes on a sample project.
 func BenchmarkExtractAll(b *testing.B) {
 	root := filepath.Join("..", "..", "testdata", "sample_go")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -447,6 +470,7 @@ func BenchmarkExtractAll(b *testing.B) {
 	}
 }
 
+// TestIncrementalRescanHashes checks that incremental extraction reuses cached symbols for files whose content hash is unchanged.
 func TestIncrementalRescanHashes(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_go")
 	files, err := scanner.Scan(root, scanner.Options{})

@@ -1,3 +1,8 @@
+// Program: soft_DNA - settingsdialog.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Builds the Settings dialog where the user configures the local LLM (binary, models, threads, GPU layers, limits, timeout), tests a model, and saves the result.
+
 package gui
 
 import (
@@ -18,6 +23,7 @@ import (
 // Nothing here ever performs a network call. Saved settings persist to the
 // OS user config directory so they survive between runs.
 func (a *App) showSettingsDialog() {
+	// Form widgets, pre-filled from the current settings; each Browse button opens a file picker and writes the chosen path into its entry.
 	enabled := widget.NewCheck("Enable local LLM summaries and grounded Ask", nil)
 	enabled.SetChecked(a.settings.LLMEnabled)
 
@@ -75,6 +81,7 @@ func (a *App) showSettingsDialog() {
 	gpuLayersEntry.SetText(strconv.Itoa(a.settings.LLMGPULayers))
 	gpuLayersEntry.SetPlaceHolder("0 = CPU only")
 
+	// modelHint warns when the chosen model file is very large (4 GB or more), since per-file annotation is slow on CPU.
 	modelHint := widget.NewLabel("")
 	modelHint.Wrapping = fyne.TextWrapWord
 	updateModelHint := func(path string) {
@@ -97,12 +104,14 @@ func (a *App) showSettingsDialog() {
 	// instead of after an hours-long scan.
 	testStatus := widget.NewLabel("")
 	testStatus.Wrapping = fyne.TextWrapWord
+	// testBtn is declared first so its own callback can disable and re-enable it.
 	var testBtn *widget.Button
 	testBtn = widget.NewButton("Test model", func() {
 		threads, err := strconv.Atoi(threadsEntry.Text)
 		if err != nil || threads <= 0 {
 			threads = a.settings.LLMThreads
 		}
+		// Build a throwaway Settings from the typed values so the test uses the same timeout rule as a real scan.
 		trial := Settings{LLMModel: modelEntry.Text}
 		if v, err := strconv.Atoi(strings.TrimSpace(timeoutEntry.Text)); err == nil && v > 0 {
 			trial.LLMTimeoutSec = v
@@ -138,6 +147,7 @@ func (a *App) showSettingsDialog() {
 		widget.NewFormItem("", container.NewVBox(container.NewHBox(testBtn), testStatus)),
 	)
 
+	// On Save, parse each numeric field and keep the previous value when the input is invalid, then persist and warn about any configuration that would make the LLM pass be skipped.
 	d := dialog.NewCustomConfirm("Settings", "Save", "Cancel", form, func(ok bool) {
 		if !ok {
 			return

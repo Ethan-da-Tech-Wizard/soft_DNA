@@ -1,3 +1,8 @@
+// Program: soft_DNA - architecture.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Builds the Architecture Explainer model (shapes, labels, explanations and connections) from a pipeline result, with no UI code so it can be tested without a display.
+
 package gui
 
 // Architecture Explainer model: a shaped, explained view of a scanned

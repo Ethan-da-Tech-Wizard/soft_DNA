@@ -1,5 +1,10 @@
 //go:build ignore
 
+// Program: soft_DNA - gen_icon.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Standalone generator (excluded from normal builds) that draws the application icon as a 128 by 128 PNG using only the standard library.
+
 // One-off generator for icon.png — a simple, flat geometric mark (no font
 // rendering needed) so codelens-gui has something other than Fyne's default
 // logo in the taskbar/dock. Regenerate with:
@@ -14,6 +19,7 @@ import (
 	"os"
 )
 
+// size is the width and height of the icon in pixels.
 const size = 128
 
 // roundedRectAlpha returns 0..1 coverage for point (x,y) inside a rounded
@@ -53,11 +59,13 @@ func roundedRectAlpha(x, y, w, h, r float64) float64 {
 	return 1 - edge
 }
 
+// lerp blends colour a toward colour b by fraction t (0 to 1), channel by channel.
 func lerp(a, b color.NRGBA, t float64) color.NRGBA {
 	l := func(x, y uint8) uint8 { return uint8(float64(x) + (float64(y)-float64(x))*t) }
 	return color.NRGBA{R: l(a.R, b.R), G: l(a.G, b.G), B: l(a.B, b.B), A: l(a.A, b.A)}
 }
 
+// main paints a dark rounded square with a smaller blue rounded square on top, anti-aliased, and writes icon.png in the current directory.
 func main() {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 
@@ -68,6 +76,7 @@ func main() {
 	const outerMargin, outerR = 4.0, 26.0
 	const innerMargin, innerR = 30.0, 14.0
 
+	// For each pixel, compute how much the outer and inner rounded squares cover it, and blend the colours accordingly.
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
 			ox, oy := float64(x)-outerMargin, float64(y)-outerMargin

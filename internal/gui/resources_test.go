@@ -1,3 +1,8 @@
+// Program: soft_DNA - resources_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests that the embedded application icon is a decodable, square, reasonably sized PNG with the expected resource name.
+
 package gui
 
 import (
@@ -6,6 +11,7 @@ import (
 	"testing"
 )
 
+// TestAppIconIsValidPNG decodes the embedded icon and checks it is square, at least 32 pixels wide, and named icon.png.
 func TestAppIconIsValidPNG(t *testing.T) {
 	img, err := png.Decode(bytes.NewReader(iconPNG))
 	if err != nil {

@@ -1,3 +1,8 @@
+// Program: soft_DNA - stackdetect.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Infers a project's languages, frameworks and tools from the manifest files present in the scanned inventory, and summarises them in one line.
+
 // Package stackdetect infers a project stack from manifest files.
 package stackdetect
 
@@ -26,17 +31,20 @@ type Report struct {
 
 // Detect returns manifest-based stack evidence.
 func Detect(files []scanner.FileInfo, root string) Report {
+	// seen de-duplicates findings by category, name and evidence file; paths gives quick lookup of which files exist.
 	seen := make(map[string]Tech)
 	paths := make(map[string]scanner.FileInfo, len(files))
 	for _, file := range files {
 		paths[file.Path] = file
 	}
 
+	// add records one detected technology together with the file that is the evidence for it.
 	add := func(name, category, evidence string) {
 		key := category + ":" + name + ":" + evidence
 		seen[key] = Tech{Name: name, Category: category, EvidenceFile: evidence}
 	}
 
+	// hasC notes whether any C source was scanned, which some manifest rules (such as build files) use as extra evidence.
 	hasC := false
 	for _, file := range files {
 		if file.Language == "C" {
@@ -146,6 +154,7 @@ func Detect(files []scanner.FileInfo, root string) Report {
 	}
 }
 
+// detectPackageJSON reads package.json (if present and valid) and reports React, Next.js, Vite and TypeScript when they appear in dependencies or devDependencies.
 func detectPackageJSON(root string, add func(string, string, string)) {
 	data, err := os.ReadFile(filepath.Join(root, "package.json"))
 	if err != nil {
@@ -182,6 +191,7 @@ func detectPackageJSON(root string, add func(string, string, string)) {
 	}
 }
 
+// summary joins the unique technology names, sorted, with " + ", or says that no manifest was detected.
 func summary(tech []Tech) string {
 	if len(tech) == 0 {
 		return "No stack manifest detected"

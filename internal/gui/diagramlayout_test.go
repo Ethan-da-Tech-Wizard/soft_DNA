@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagramlayout_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the diagram layout calculations: node and edge counts, vertical ordering, row wrapping, centring, and drill-down scopes.
+
 package gui
 
 import (
@@ -8,6 +13,7 @@ import (
 	"codelens-local/internal/structure"
 )
 
+// TestComputeDiagramLayoutRootAlone checks that empty input yields only the root node and no edges.
 func TestComputeDiagramLayoutRootAlone(t *testing.T) {
 	layout := ComputeDiagramLayout(stackdetect.Report{}, nil, nil)
 	if len(layout.Nodes) != 1 || layout.Nodes[0].ID != "root" {
@@ -18,6 +24,7 @@ func TestComputeDiagramLayoutRootAlone(t *testing.T) {
 	}
 }
 
+// TestComputeDiagramLayoutFoldersEntriesAndStack checks node and edge counts for folders, an entry point and a stack, that technology boxes sit below the root, and that a size is computed.
 func TestComputeDiagramLayoutFoldersEntriesAndStack(t *testing.T) {
 	folders := []structure.Folder{{Path: ".", Role: "Root files"}, {Path: "cmd", Role: "Entry points"}}
 	entries := []structure.EntryPoint{{Path: "main.go", Reason: "Go main"}}
@@ -54,6 +61,7 @@ func TestComputeDiagramLayoutFoldersEntriesAndStack(t *testing.T) {
 	}
 }
 
+// TestComputeDiagramLayoutNoDuplicateEdgesWithoutStack checks that no edge mentions the stack node when no technologies were detected.
 func TestComputeDiagramLayoutNoDuplicateEdgesWithoutStack(t *testing.T) {
 	layout := ComputeDiagramLayout(stackdetect.Report{}, []structure.Folder{{Path: "src", Role: "Source"}}, nil)
 	for _, e := range layout.Edges {
@@ -63,6 +71,7 @@ func TestComputeDiagramLayoutNoDuplicateEdgesWithoutStack(t *testing.T) {
 	}
 }
 
+// TestComputeDiagramLayoutWrapping checks that twelve folders wrap into rows of five and that the root is centred over the five-column grid.
 func TestComputeDiagramLayoutWrapping(t *testing.T) {
 	// Create 12 folders. They should wrap into 3 rows of at most 5 columns:
 	// Row 0: 5 items
@@ -106,6 +115,7 @@ func TestComputeDiagramLayoutWrapping(t *testing.T) {
 	}
 }
 
+// TestComputeDiagramLayoutForScope checks that an empty scope gives the top-level layout and that scope "app" shows its subfolder and file as children.
 func TestComputeDiagramLayoutForScope(t *testing.T) {
 	files := []scanner.FileInfo{
 		{Path: "main.go"},

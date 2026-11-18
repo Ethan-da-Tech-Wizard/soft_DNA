@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagramlayout.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Computes renderer-independent box positions and edges for the architecture diagram, for both the root view and a drilled-down folder view.
+
 package gui
 
 import (
@@ -34,6 +39,7 @@ type DiagramLayout struct {
 }
 
 const (
+	// Fixed box size and spacing (in layout units) shared by the canvas and the SVG export.
 	diagramNodeW = float32(180)
 	diagramNodeH = float32(44)
 	diagramHGap  = float32(24)
@@ -47,6 +53,7 @@ const (
 // Layer 1 is wrapped into rows of at most 5 columns so it remains readable
 // on medium displays, and the root is centered horizontally above them.
 func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint) DiagramLayout {
+	// Well-known IDs for the root and stack boxes.
 	const rootID = "root"
 	const stackID = "stack"
 
@@ -54,6 +61,7 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		Nodes: []DiagramNode{{ID: rootID, Label: "Project Root", W: diagramNodeW, H: diagramNodeH}},
 	}
 
+	// Layer 1: one box per folder and entry point, plus the Detected Stack box when technologies were found.
 	var layer1 []DiagramNode
 	for _, f := range folders {
 		id := "folder_" + f.Path
@@ -71,6 +79,7 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		layout.Edges = append(layout.Edges, DiagramEdge{From: rootID, To: stackID})
 	}
 
+	// Place layer 1 in a grid of at most five columns, wrapping to new rows.
 	const maxCols = 5
 	rowY := diagramVGap + diagramNodeH
 	var lastRowIndex int
@@ -85,6 +94,7 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 	}
 	layout.Nodes = append(layout.Nodes, layer1...)
 
+	// Layer 2 starts below the last row of layer 1.
 	var layer2Y float32
 	if len(layer1) > 0 {
 		layer2Y = rowY + float32(lastRowIndex)*(diagramNodeH+diagramVGap) + diagramNodeH + diagramVGap
@@ -92,6 +102,7 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 		layer2Y = rowY + diagramNodeH + diagramVGap
 	}
 
+	// Layer 2: one box per detected technology, laid out in a single row under the stack box.
 	var layer2 []DiagramNode
 	for i, tech := range stack.Tech {
 		id := "tech_" + strconv.Itoa(i) + "_" + tech.Name
@@ -106,6 +117,7 @@ func ComputeDiagramLayout(stack stackdetect.Report, folders []structure.Folder, 
 	}
 	layout.Nodes = append(layout.Nodes, layer2...)
 
+	// Centre the root box horizontally over the width of the grid.
 	maxColsInLayer1 := maxCols
 	if len(layer1) < maxCols {
 		maxColsInLayer1 = len(layer1)
@@ -136,6 +148,7 @@ func ComputeDiagramLayoutForScope(files []scanner.FileInfo, stack stackdetect.Re
 		return ComputeDiagramLayout(stack, folders, entries)
 	}
 
+	// Drilled-down view: the chosen folder becomes the root, with its subfolders and files as children.
 	parentID := "folder_" + scope
 	layout := DiagramLayout{
 		Nodes: []DiagramNode{{ID: parentID, Label: filepath.Base(scope), W: diagramNodeW, H: diagramNodeH}},
@@ -175,6 +188,7 @@ func ComputeDiagramLayoutForScope(files []scanner.FileInfo, stack stackdetect.Re
 	}
 	layout.Nodes = append(layout.Nodes, children...)
 
+	// Centre the parent box horizontally over the width of the grid.
 	maxColsInLayer1 := maxCols
 	if len(children) < maxCols {
 		maxColsInLayer1 = len(children)

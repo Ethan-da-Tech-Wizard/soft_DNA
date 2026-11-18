@@ -1,3 +1,8 @@
+// Program: soft_DNA - ask.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Builds the chat-style Ask tab of the GUI and formats cited answers for display.
+
 package gui
 
 import (
@@ -16,12 +21,14 @@ import (
 // configured, or plain FTS citations otherwise) appended below as a bubble.
 // Every answer is also written to ANSWER.md, matching --ask on the CLI.
 func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
+	// history is the scrolling list of question and answer bubbles.
 	history := container.NewVBox()
 	historyScroll := container.NewVScroll(history)
 
 	question := widget.NewEntry()
 	question.SetPlaceHolder("Ask a question about this codebase…")
 
+	// addBubble appends a bold speaker title and wrapped message text to the history.
 	addBubble := func(who, text string) {
 		title := widget.NewLabel(who)
 		title.TextStyle = fyne.TextStyle{Bold: true}
@@ -31,6 +38,7 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 		historyScroll.ScrollToBottom()
 	}
 
+	// The Send button is created first so the ask closure can disable it while a question is running.
 	send := widget.NewButton("Send", nil)
 	ask := func() {
 		if send.Disabled() {
@@ -50,6 +58,7 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 		history.Add(container.NewVBox(clTitle, clBody, widget.NewSeparator()))
 		historyScroll.ScrollToBottom()
 
+		// Run the (possibly slow) answer lookup off the UI thread.
 		go func() {
 			gotTokens := false
 			ans, err := cli.Answer(cli.AnswerOptions{
@@ -63,6 +72,7 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 				LLMThreads:   a.settings.LLMThreads,
 				LLMTimeout:   a.settings.EffectiveLLMTimeout(),
 				LLMGPULayers: a.settings.LLMGPULayers,
+				// Stream tokens into the answer bubble as the local model produces them; fyne.Do marshals the update to the UI thread.
 				TokenCallback: func(token string) {
 					fyne.Do(func() {
 						if !gotTokens {
@@ -96,6 +106,7 @@ func (a *App) newAskTab(res cli.PipelineResult) fyne.CanvasObject {
 	return container.NewBorder(nil, inputRow, nil, nil, historyScroll)
 }
 
+// formatAnswer renders an AnswerResult as plain text: an optional warning, the model answer or a fallback sentence, then the list of source files.
 func formatAnswer(ans cli.AnswerResult) string {
 	var b strings.Builder
 	if ans.LLMWarning != "" {

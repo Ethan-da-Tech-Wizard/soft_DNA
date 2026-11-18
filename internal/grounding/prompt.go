@@ -1,3 +1,8 @@
+// Program: soft_DNA - prompt.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Holds the prompt templates (file explanation, project overview, grounded ask) and functions that render them from verified facts, with fixed rules telling the model to use only those facts.
+
 package grounding
 
 import (
@@ -144,6 +149,7 @@ Respond ONLY with valid JSON (no markdown, no commentary):
 {"answer":"<plain English answer grounded in the snippets>"}`
 
 var (
+	// Templates are parsed once at start-up; template.Must panics immediately if one is malformed.
 	fileExplainTmpl     = template.Must(template.New("fileExplain").Parse(fileExplainPrompt))
 	projectOverviewTmpl = template.Must(template.New("projectOverview").Parse(projectOverviewPrompt))
 	askAnswerTmpl       = template.Must(template.New("askAnswer").Parse(askAnswerPrompt))

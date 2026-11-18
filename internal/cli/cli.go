@@ -1,3 +1,8 @@
+// Program: soft_DNA - cli.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Implements the codelens command-line interface and the shared scan/index/LLM pipeline (RunPipeline, Answer, report writing) that the GUI also uses.
+
 // Package cli implements the minimal CodeLens command-line interface.
 package cli
 
@@ -33,10 +38,12 @@ const (
 	exitInternal = 3
 )
 
+// File names written inside the output directory: the Markdown report, the --ask answer, and the SQLite index.
 const reportName = "CODEBASE_REPORT.md"
 const answerName = "ANSWER.md"
 const dbName = "codelens.db"
 
+// IndexStats summarises the SQLite index that was just built: its path and the number of file, search and symbol rows.
 type IndexStats struct {
 	Path       string
 	Files      int
@@ -46,6 +53,7 @@ type IndexStats struct {
 
 // Run executes the CLI and returns the process exit code.
 func Run(args []string, stdout, stderr io.Writer, version string) int {
+	// Declare every command-line flag; ContinueOnError lets Run return an exit code instead of exiting.
 	fs := flag.NewFlagSet("codelens", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
@@ -80,17 +88,20 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 		return exitUsage
 	}
 
+	// Handle --version before any path validation so it works without a target.
 	if *showVersion {
 		fmt.Fprintf(stdout, "codelens %s\n", version)
 		return exitOK
 	}
 
+	// Exactly one positional argument (the project path) is required.
 	if fs.NArg() != 1 {
 		fs.Usage()
 		return exitUsage
 	}
 
 	root := fs.Arg(0)
+	// Run the full scan, index and optional LLM pipeline; map failures to distinct exit codes.
 	res, err := RunPipeline(PipelineOptions{
 		Root:        root,
 		OutDir:      *outDir,
@@ -230,10 +241,12 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		return PipelineResult{}, fmt.Errorf("scan failed: %w", err)
 	}
 
+	// Emit a progress line for every 200 scanned files.
 	for i := 200; i <= len(files); i += 200 {
 		fmt.Fprintf(diagOut, "[Scanner] Scanned %d files...\n", i)
 	}
 
+	// Load the previous run's report.json (if any) so unchanged files can reuse cached symbols and LLM summaries.
 	var cache PipelineResult
 	hasCache := false
 	cachePath := filepath.Join(outDir, "report.json")
@@ -261,6 +274,7 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		}
 	}
 
+	// Deterministic analysis stages: tech stack, folder roles and entry points, then symbols (incremental when a cache exists).
 	stack := stackdetect.Detect(files, opts.Root)
 	folders, entries := structure.Analyze(files)
 	var symbolList []symbols.Symbol
@@ -287,6 +301,7 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		Symbols: symbolList, Index: stats, DiagramPath: diagramPath,
 	}
 
+	// The LLM pass is optional and never fatal: problems become warnings and the deterministic report still completes.
 	if opts.LLMEnabled {
 		if opts.LLMBinary == "" || opts.LLMModel == "" {
 			res.Warnings = append(res.Warnings, "--llm is enabled but the LLM binary or model path is missing; skipping LLM pass")
@@ -309,6 +324,7 @@ func RunPipeline(opts PipelineOptions, diagOut io.Writer) (PipelineResult, error
 		}
 	}
 
+	// Save the result as report.json for the next run's cache; a write failure is ignored on purpose.
 	if data, jerr := json.Marshal(res); jerr == nil {
 		_ = os.WriteFile(filepath.Join(outDir, "report.json"), data, 0o644)
 	}
@@ -384,6 +400,7 @@ func Answer(opts AnswerOptions) (AnswerResult, error) {
 	return res, nil
 }
 
+// validateRoot checks that path is non-empty, exists and is a directory.
 func validateRoot(path string) error {
 	if path == "" {
 		return errors.New("path is required")
@@ -399,6 +416,7 @@ func validateRoot(path string) error {
 	return nil
 }
 
+// writeReport renders the full CODEBASE_REPORT.md (summary, stack, folders, important files, symbols, setup guess, risks and any LLM summaries) into outDir.
 func writeReport(
 	root, outDir string,
 	files []scanner.FileInfo,
@@ -568,6 +586,7 @@ Diagram: %s.
 	return os.WriteFile(filepath.Join(outDir, reportName), []byte(b.String()), 0o644)
 }
 
+// buildIndex creates (or rebuilds) the SQLite search index in outDir from the scanned files and symbols and returns its row counts.
 func buildIndex(root, outDir string, files []scanner.FileInfo, symbolList []symbols.Symbol) (IndexStats, error) {
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return IndexStats{}, err
@@ -608,6 +627,7 @@ func answerHits(outDir, question string, entries []structure.EntryPoint) ([]sear
 	}
 	defer store.Close()
 
+	// Entry-point hits take priority; the full-text search only fills the remaining slots (five results in total).
 	entryHits := entryPointHits(question, entries)
 	limit := 5 - len(entryHits)
 	if limit < 0 {
@@ -741,6 +761,7 @@ func answerWithLLM(root, question string, hits []searchindex.Hit, binaryPath, mo
 	return aa.Answer, nil
 }
 
+// outputAwareIgnores returns the user's ignore patterns plus the output directory (when it lives inside the scanned root) so generated files are not scanned as source.
 func outputAwareIgnores(root, outDir string, userIgnores []string) []string {
 	ignores := append([]string{}, userIgnores...)
 	rel, ok := relInside(root, outDir)
@@ -751,6 +772,7 @@ func outputAwareIgnores(root, outDir string, userIgnores []string) []string {
 	return ignores
 }
 
+// relInside returns path relative to root and true, or false when path is outside root or cannot be resolved.
 func relInside(root, path string) (string, bool) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -770,6 +792,7 @@ func relInside(root, path string) (string, bool) {
 	return rel, true
 }
 
+// entryPointHits turns the project's entry points into search hits when the question asks about where things start (mentions start, entry or main).
 func entryPointHits(question string, entries []structure.EntryPoint) []searchindex.Hit {
 	question = strings.ToLower(question)
 	if !strings.Contains(question, "start") && !strings.Contains(question, "entry") && !strings.Contains(question, "main") {
@@ -783,6 +806,7 @@ func entryPointHits(question string, entries []structure.EntryPoint) []searchind
 	return hits
 }
 
+// mergeHits combines two hit lists, putting priority first, dropping duplicate paths, and keeping at most five results.
 func mergeHits(priority, fallback []searchindex.Hit) []searchindex.Hit {
 	seen := make(map[string]struct{})
 	var out []searchindex.Hit
@@ -808,6 +832,7 @@ func mergeHits(priority, fallback []searchindex.Hit) []searchindex.Hit {
 	return out
 }
 
+// writeSymbolsSection writes a Markdown table of the symbols whose Kind is in kinds, or a placeholder line when none match.
 func writeSymbolsSection(b *strings.Builder, symbolList []symbols.Symbol, kinds ...string) {
 	allowed := make(map[string]struct{}, len(kinds))
 	for _, kind := range kinds {
@@ -838,6 +863,7 @@ func writeSymbolsSection(b *strings.Builder, symbolList []symbols.Symbol, kinds 
 	}
 }
 
+// writeSetupGuess lists guessed install and run commands based on the detected manifests.
 func writeSetupGuess(b *strings.Builder, stack stackdetect.Report) {
 	if len(stack.Tech) == 0 {
 		b.WriteString("No setup command guessed from manifests.\n")
@@ -850,6 +876,7 @@ func writeSetupGuess(b *strings.Builder, stack stackdetect.Report) {
 	}
 }
 
+// setupCommands maps manifest evidence files (for example lock files that pick a package manager) to a de-duplicated, sorted list of likely setup and run commands.
 func setupCommands(stack stackdetect.Report) []string {
 	evidence := make(map[string]bool, len(stack.Tech))
 	for _, t := range stack.Tech {
@@ -926,6 +953,7 @@ func setupCommands(stack stackdetect.Report) []string {
 	return out
 }
 
+// writeRiskSection lists files the scanner skipped, with the reason, as a sorted bullet list.
 func writeRiskSection(b *strings.Builder, files []scanner.FileInfo) {
 	var risks []string
 	for _, file := range files {
@@ -943,6 +971,7 @@ func writeRiskSection(b *strings.Builder, files []scanner.FileInfo) {
 	}
 }
 
+// importantFiles collects manifest evidence files, entry points and well-known files (README, Makefile, Dockerfile) into a de-duplicated sorted list.
 func importantFiles(files []scanner.FileInfo, entries []structure.EntryPoint, stack stackdetect.Report) []string {
 	seen := make(map[string]struct{})
 	var out []string
@@ -974,16 +1003,20 @@ func importantFiles(files []scanner.FileInfo, entries []structure.EntryPoint, st
 	return out
 }
 
+// escapeMarkdown escapes the pipe character so a value cannot break out of a Markdown table cell.
 func escapeMarkdown(value string) string {
 	return strings.ReplaceAll(value, "|", `\|`)
 }
 
+// repeatableFlag is a flag.Value that collects every occurrence of a repeated flag (such as --ignore) into a slice.
 type repeatableFlag []string
 
+// String joins the collected values with commas (part of the flag.Value interface).
 func (r *repeatableFlag) String() string {
 	return strings.Join(*r, ",")
 }
 
+// Set appends one more occurrence of the flag (part of the flag.Value interface).
 func (r *repeatableFlag) Set(value string) error {
 	*r = append(*r, value)
 	return nil
@@ -1025,6 +1058,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath, annotationModelPath str
 	}
 
 	// Build map for quick FileInfo lookup by path
+	// Index file metadata by path so cached content hashes can be compared quickly.
 	infoMap := make(map[string]scanner.FileInfo, len(files))
 	for _, f := range files {
 		infoMap[f.Path] = f
@@ -1041,10 +1075,12 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath, annotationModelPath str
 	}
 	sort.Strings(fileList)
 
+	// Honour the user's cap on how many files get an LLM explanation.
 	if maxFiles > 0 && len(fileList) > maxFiles {
 		fileList = fileList[:maxFiles]
 	}
 
+	// Reuse a cached summary when the file's content hash is unchanged; only new or changed files go to the model.
 	var filesToAnnotate []string
 	for _, f := range fileList {
 		info := infoMap[f]
@@ -1057,6 +1093,7 @@ func runLLMPipeline(root, dbPath, binaryPath, modelPath, annotationModelPath str
 		filesToAnnotate = append(filesToAnnotate, f)
 	}
 
+	// One loop segment for the project overview plus one per file that still needs a summary.
 	diag := llm.NewLoopState(1+len(filesToAnnotate), diagOut)
 
 	// 1. Project Overview Summarization (Segment 0)
