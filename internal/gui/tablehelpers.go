@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: tablehelpers.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Provides layout utilities and column formatters for tabular data views, including file inventories and symbol lists.
+// ==============================================================================
+
 package gui
 
 import (

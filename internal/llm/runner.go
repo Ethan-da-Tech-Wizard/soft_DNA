@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: runner.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Manages child process lifecycles for local llama-cli execution, configuring context lengths, thread counts, streaming output parsers, and process timeouts.
+// ==============================================================================
+
 // Package llm runs a local llama.cpp subprocess and returns its JSON output.
 // It is the only pipeline component that spawns a child process; all other
 // stages are pure in-process computation (G-1 exemption: the target project

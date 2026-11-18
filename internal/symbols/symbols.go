@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: symbols.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Extracts declarations, functions, methods, classes, and exported interfaces across supported source languages using regex and pattern analysis without requiring full compilation toolchains.
+// ==============================================================================
+
 // Package symbols extracts simple source symbols without executing target code.
 package symbols
 

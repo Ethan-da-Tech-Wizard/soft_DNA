@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# Program: download_llama.sh
+# Programmer: Ethan-da-Tech-Wizard
+# Last Modified: November 18, 2026
+# Purpose: Automates platform detection (macOS Apple Silicon/Intel, Linux, Windows), downloads pre-compiled llama.cpp binaries, verifies archive integrity, and installs them into the local toolchain.
+# ==============================================================================
+
 # download_llama.sh — Download and install a pre-built llama-cli binary for CodeLens Local.
 #
 # Usage:

@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: resources.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Monitors system memory headroom, CPU load, and active model memory footprints to ensure local inference runs within host hardware constraints.
+// ==============================================================================
+
 package gui
 
 import (

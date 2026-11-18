@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: store.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Provides persistent and in-memory indexing of repository metadata, symbol tables, and scan results to enable instant subsequent queries without re-scanning unchanged files.
+// ==============================================================================
+
 // Package index stores scanner inventory in SQLite with FTS5 search.
 package index
 

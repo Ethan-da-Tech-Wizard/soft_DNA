@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: ask.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Implements interactive conversational interface in the GUI, routing developer questions to the local grounded LLM runner and rendering streaming responses.
+// ==============================================================================
+
 package gui
 
 import (

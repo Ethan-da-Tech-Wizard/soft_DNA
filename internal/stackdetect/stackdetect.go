@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: stackdetect.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Inspects project manifests (package.json, go.mod, Cargo.toml, requirements.txt, etc.) to detect technology stacks, framework dependencies, runtime versions, and system architecture.
+// ==============================================================================
+
 // Package stackdetect infers a project stack from manifest files.
 package stackdetect
 

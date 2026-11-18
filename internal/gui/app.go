@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: app.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Constructs the primary Fyne application window, menu bars, status bars, and tab navigation layout for the CodeLens Local desktop GUI.
+// ==============================================================================
+
 package gui
 
 import (

@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: architecture.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Implements the architecture view canvas and data models, analyzing inter-package couplings and visualizing subsystems as interactive node clusters.
+// ==============================================================================
+
 package gui
 
 // Architecture Explainer model: a shaped, explained view of a scanned

@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: gen_icon.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Generates desktop icon assets and application badge graphics for CodeLens packaging.
+// ==============================================================================
+
 //go:build ignore
 
 // One-off generator for icon.png — a simple, flat geometric mark (no font

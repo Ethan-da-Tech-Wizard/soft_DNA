@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: settings_test.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Manages application settings persistence, JSON configuration storage, model path selections, and preference dialog interfaces in the GUI.
+// ==============================================================================
+
 package gui
 
 import (

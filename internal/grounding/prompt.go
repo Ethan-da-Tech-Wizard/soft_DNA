@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: prompt.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Constructs grounded context windows for local LLM inference, assembling repository maps, symbol inventories, and architectural highlights into structured prompt templates.
+// ==============================================================================
+
 package grounding
 
 import (
