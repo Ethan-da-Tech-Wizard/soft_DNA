@@ -1,3 +1,8 @@
+// Program: soft_DNA - stackdetect_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests manifest-based stack detection for Python, Node, Ruby, Rust, C, C++, SQL, Swift and R projects, package-manager variants, and an unknown project.
+
 package stackdetect
 
 import (
@@ -8,6 +13,7 @@ import (
 	"codelens-local/internal/scanner"
 )
 
+// TestDetectPythonStack checks that the sample Python project is detected from its requirements file.
 func TestDetectPythonStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -25,6 +31,7 @@ func TestDetectPythonStack(t *testing.T) {
 	}
 }
 
+// TestDetectNodeStack checks the summary produced for the sample Node project.
 func TestDetectNodeStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -40,6 +47,7 @@ func TestDetectNodeStack(t *testing.T) {
 	}
 }
 
+// TestDetectUnknownStack checks that a project with no manifests reports no stack.
 func TestDetectUnknownStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_empty")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -57,6 +65,7 @@ func TestDetectUnknownStack(t *testing.T) {
 	}
 }
 
+// TestDetectRubyStack checks that a Gemfile yields Ruby as a language and Bundler as a tool.
 func TestDetectRubyStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_ruby")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -79,6 +88,7 @@ func TestDetectRubyStack(t *testing.T) {
 	}
 }
 
+// TestDetectRustStack checks that Cargo.toml yields Rust as a language and Cargo as a tool.
 func TestDetectRustStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_rust")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -101,6 +111,7 @@ func TestDetectRustStack(t *testing.T) {
 	}
 }
 
+// TestDetectCStack checks that a Makefile with C sources yields C as a language and Make as a tool.
 func TestDetectCStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_c")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -123,6 +134,7 @@ func TestDetectCStack(t *testing.T) {
 	}
 }
 
+// TestDetectPyprojectWithPoetry checks that pyproject.toml alongside a Poetry lock file is detected as Python.
 func TestDetectPyprojectWithPoetry(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[tool.poetry]\nname = \"myproject\"\n"), 0o644); err != nil {
@@ -155,6 +167,7 @@ func TestDetectPyprojectWithPoetry(t *testing.T) {
 	}
 }
 
+// TestDetectPyprojectWithPipenv checks that pyproject.toml alongside a Pipfile is detected as Python.
 func TestDetectPyprojectWithPipenv(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname = \"myproject\"\n"), 0o644); err != nil {
@@ -184,6 +197,7 @@ func TestDetectPyprojectWithPipenv(t *testing.T) {
 	}
 }
 
+// TestDetectSQLStack checks that schema.sql yields a SQL database entry.
 func TestDetectSQLStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_sql")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -203,6 +217,7 @@ func TestDetectSQLStack(t *testing.T) {
 	}
 }
 
+// TestDetectSwiftStack checks that Package.swift yields Swift as a language and Swift Package Manager as a tool.
 func TestDetectSwiftStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_swift")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -225,6 +240,7 @@ func TestDetectSwiftStack(t *testing.T) {
 	}
 }
 
+// TestDetectRStack checks that a DESCRIPTION file yields R as a language and Rscript as a tool.
 func TestDetectRStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_r")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -247,6 +263,7 @@ func TestDetectRStack(t *testing.T) {
 	}
 }
 
+// TestDetectYarnStack checks that yarn.lock adds Yarn while package.json still yields Node.js.
 func TestDetectYarnStack(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "package.json"), `{"name":"myapp"}`)
@@ -272,6 +289,7 @@ func TestDetectYarnStack(t *testing.T) {
 	}
 }
 
+// TestDetectPnpmStack checks that pnpm-lock.yaml adds pnpm while package.json still yields Node.js.
 func TestDetectPnpmStack(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "package.json"), `{"name":"myapp"}`)
@@ -296,6 +314,7 @@ func TestDetectPnpmStack(t *testing.T) {
 	}
 }
 
+// TestDetectBunStack checks that bun.lockb adds Bun while package.json still yields Node.js.
 func TestDetectBunStack(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "package.json"), `{"name":"myapp"}`)
@@ -328,6 +347,7 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 }
 
+// TestDetectCPPStack checks that CMakeLists.txt yields C++ as a language and CMake as a tool, with the summary "C++ + CMake".
 func TestDetectCPPStack(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_cpp")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -354,6 +374,7 @@ func TestDetectCPPStack(t *testing.T) {
 	}
 }
 
+// TestDetectMakefileWithoutCSources checks that a Makefile alone does not claim C as a language while go.mod and Make are still detected.
 func TestDetectMakefileWithoutCSources(t *testing.T) {
 	root := t.TempDir()
 	mustWriteFile(t, filepath.Join(root, "go.mod"), "module myapp\n")

@@ -1,3 +1,8 @@
+// Program: soft_DNA - cli_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the command-line interface and pipeline: exit codes, report and answer output for every sample language, flags, setup-command guessing, and the LLM loop using mock model binaries.
+
 package cli
 
 import (
@@ -19,6 +24,7 @@ import (
 	"codelens-local/internal/symbols"
 )
 
+// TestRunWritesReportForDirectory checks that running on the sample project exits successfully and writes the report with its header.
 func TestRunWritesReportForDirectory(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "main.py"), []byte("print('hi')\n"), 0o644); err != nil {
@@ -60,6 +66,7 @@ func TestRunWritesReportForDirectory(t *testing.T) {
 	}
 }
 
+// TestRunPopulatesFullReportSections checks that the report contains every expected section and detail.
 func TestRunPopulatesFullReportSections(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -92,6 +99,7 @@ func TestRunPopulatesFullReportSections(t *testing.T) {
 	}
 }
 
+// TestRunFullReportGoldenPrefix compares the start of the generated report with an exact expected text.
 func TestRunFullReportGoldenPrefix(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -183,6 +191,7 @@ No scanner-level risks identified.
 	}
 }
 
+// TestRunWritesLocalAnswer checks that --ask writes an answer file with its expected parts.
 func TestRunWritesLocalAnswer(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -210,6 +219,7 @@ func TestRunWritesLocalAnswer(t *testing.T) {
 	}
 }
 
+// TestRunAnswerPrefersEntryPointQuestions checks that a question about where things start cites the entry point first.
 func TestRunAnswerPrefersEntryPointQuestions(t *testing.T) {
 	root := filepath.Join("..", "..")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -230,6 +240,7 @@ func TestRunAnswerPrefersEntryPointQuestions(t *testing.T) {
 	}
 }
 
+// TestRunIgnoresOutputDirectoryWhenScanningRoot checks that an output folder inside the scanned root is not scanned as source.
 func TestRunIgnoresOutputDirectoryWhenScanningRoot(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "codelens-out")
@@ -259,6 +270,7 @@ func TestRunIgnoresOutputDirectoryWhenScanningRoot(t *testing.T) {
 	}
 }
 
+// TestRunRejectsMissingPath checks that a non-existent path gives the bad-path exit code and an invalid-path message.
 func TestRunRejectsMissingPath(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{filepath.Join(t.TempDir(), "missing")}, &stdout, &stderr, "test")
@@ -271,6 +283,7 @@ func TestRunRejectsMissingPath(t *testing.T) {
 	}
 }
 
+// TestRunRejectsFilePath checks that a file (not a folder) as the path gives the bad-path exit code.
 func TestRunRejectsFilePath(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "file.txt")
 	if err := os.WriteFile(file, []byte("not a directory"), 0o644); err != nil {
@@ -285,6 +298,7 @@ func TestRunRejectsFilePath(t *testing.T) {
 	}
 }
 
+// TestRunVersion checks that --version prints the supplied version string and exits successfully.
 func TestRunVersion(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"--version"}, &stdout, &stderr, "test-version")
@@ -297,6 +311,7 @@ func TestRunVersion(t *testing.T) {
 	}
 }
 
+// TestRunSupportsIgnoreAndMaxFileSize checks that the --ignore and --max-file-size flags are accepted and applied.
 func TestRunSupportsIgnoreAndMaxFileSize(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "keep.go"), []byte("package main\n"), 0o644); err != nil {
@@ -330,6 +345,7 @@ func TestRunSupportsIgnoreAndMaxFileSize(t *testing.T) {
 	}
 }
 
+// TestRunRequiresSinglePath checks that a missing or extra path argument gives the usage exit code and a usage message.
 func TestRunRequiresSinglePath(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run(nil, &stdout, &stderr, "test")
@@ -342,6 +358,7 @@ func TestRunRequiresSinglePath(t *testing.T) {
 	}
 }
 
+// TestSetupCommandsPyproject checks which install command is chosen for pyproject.toml with each lock file.
 func TestSetupCommandsPyproject(t *testing.T) {
 	makePyprojectStack := func(lockfile string) stackdetect.Report {
 		tech := []stackdetect.Tech{
@@ -379,6 +396,7 @@ func TestSetupCommandsPyproject(t *testing.T) {
 	}
 }
 
+// TestSetupCommandsNodeLockfiles checks that each Node lock file selects its own package manager commands, in sorted order.
 func TestSetupCommandsNodeLockfiles(t *testing.T) {
 	// makeNodeStack builds a minimal Node.js stack report.
 	// If lockfile is non-empty it adds a corresponding tech entry so the
@@ -425,6 +443,7 @@ func TestSetupCommandsNodeLockfiles(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesRubyReport checks that the report for the sample Ruby project contains the expected entries.
 func TestRunGeneratesRubyReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_ruby")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -458,6 +477,7 @@ func TestRunGeneratesRubyReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesRustReport checks that the report for the sample Rust project contains the expected entries.
 func TestRunGeneratesRustReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_rust")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -491,6 +511,7 @@ func TestRunGeneratesRustReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesCReport checks that the report for the sample C project contains the expected entries.
 func TestRunGeneratesCReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_c")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -523,6 +544,7 @@ func TestRunGeneratesCReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesSQLReport checks that the report for the sample SQL project contains the expected entries.
 func TestRunGeneratesSQLReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_sql")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -554,6 +576,7 @@ func TestRunGeneratesSQLReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesSwiftReport checks that the report for the sample Swift project contains the expected entries.
 func TestRunGeneratesSwiftReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_swift")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -587,6 +610,7 @@ func TestRunGeneratesSwiftReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesRReport checks that the report for the sample R project contains the expected entries.
 func TestRunGeneratesRReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_r")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -619,6 +643,7 @@ func TestRunGeneratesRReport(t *testing.T) {
 	}
 }
 
+// TestRunGeneratesCPPReport checks that the report for the sample C++ project contains the expected entries.
 func TestRunGeneratesCPPReport(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_cpp")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -652,6 +677,7 @@ func TestRunGeneratesCPPReport(t *testing.T) {
 	}
 }
 
+// TestRunLLMIntegration runs the whole CLI with a mock model file and a mock llama-cli script to check the LLM pass end to end.
 func TestRunLLMIntegration(t *testing.T) {
 	// Create mock model file
 	tmpDir := t.TempDir()
@@ -731,6 +757,7 @@ fi
 	}
 }
 
+// TestLLMLoopDiagnostics checks the exact diagnostic lines of the summarization loop for one failed turn followed by a successful one.
 func TestLLMLoopDiagnostics(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -783,6 +810,7 @@ func TestLLMLoopDiagnostics(t *testing.T) {
 	}
 }
 
+// TestLLMLoopAtomicBlockStall checks that repeated failures stop retrying after the stall limit, force a cutoff, and warn.
 func TestLLMLoopAtomicBlockStall(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -821,6 +849,7 @@ func TestLLMLoopAtomicBlockStall(t *testing.T) {
 	}
 }
 
+// TestRunWritesStalledFilesToReport checks that files that stalled in the LLM loop are listed with a warning in the report.
 func TestRunWritesStalledFilesToReport(t *testing.T) {
 	outDir := t.TempDir()
 	llmRes := LLMResult{
@@ -856,6 +885,7 @@ func TestRunWritesStalledFilesToReport(t *testing.T) {
 	}
 }
 
+// TestProjectOverviewValidationFailureAndRetry checks that an invalid project overview from the model is retried and then accepted.
 func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -919,6 +949,7 @@ func TestProjectOverviewValidationFailureAndRetry(t *testing.T) {
 	}
 }
 
+// TestRunAskWithGroundedLLM checks that --ask with a mock model returns a grounded answer built from snippets.
 func TestRunAskWithGroundedLLM(t *testing.T) {
 	tmpDir := t.TempDir()
 	mockModel := filepath.Join(tmpDir, "mock_model.gguf")
@@ -991,6 +1022,7 @@ fi
 	}
 }
 
+// TestRunAskLLMFallsBackToFTS checks that when the model binary fails, --ask falls back to plain search citations.
 func TestRunAskLLMFallsBackToFTS(t *testing.T) {
 	tmpDir := t.TempDir()
 	mockModel := filepath.Join(tmpDir, "mock_model.gguf")
@@ -1082,6 +1114,7 @@ func TestRunPipelineAPI(t *testing.T) {
 	}
 }
 
+// TestRunPipelineInvalidRoot checks that a missing root is reported as an invalid-root error.
 func TestRunPipelineInvalidRoot(t *testing.T) {
 	_, err := RunPipeline(PipelineOptions{Root: filepath.Join(t.TempDir(), "missing")}, io.Discard)
 	if err == nil {
@@ -1092,6 +1125,7 @@ func TestRunPipelineInvalidRoot(t *testing.T) {
 	}
 }
 
+// TestRunPipelineLLMWarningOnMissingBinary checks that enabling the LLM without a binary gives one warning and does not fail the run.
 func TestRunPipelineLLMWarningOnMissingBinary(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	outDir := filepath.Join(t.TempDir(), "out")
@@ -1105,6 +1139,7 @@ func TestRunPipelineLLMWarningOnMissingBinary(t *testing.T) {
 	}
 }
 
+// TestTestModelReportsSuccess checks that TestModel runs a tiny (8-token) inference and returns an OK message.
 func TestTestModelReportsSuccess(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -1124,6 +1159,7 @@ func TestTestModelReportsSuccess(t *testing.T) {
 	}
 }
 
+// TestTestModelSurfacesRunnerError checks that TestModel passes through the runner's binary-not-found error.
 func TestTestModelSurfacesRunnerError(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -1136,6 +1172,7 @@ func TestTestModelSurfacesRunnerError(t *testing.T) {
 	}
 }
 
+// TestTestModelRejectsEmptyOutput checks that TestModel treats whitespace-only model output as a failure.
 func TestTestModelRejectsEmptyOutput(t *testing.T) {
 	orig := llmRun
 	defer func() { llmRun = orig }()
@@ -1148,6 +1185,7 @@ func TestTestModelRejectsEmptyOutput(t *testing.T) {
 	}
 }
 
+// TestRunPipelineLogsProgress checks that the pipeline writes scanner and indexing progress lines to its log writer.
 func TestRunPipelineLogsProgress(t *testing.T) {
 	tempDir := t.TempDir()
 	for i := 0; i < 210; i++ {
@@ -1173,6 +1211,7 @@ func TestRunPipelineLogsProgress(t *testing.T) {
 	}
 }
 
+// TestIncrementalRescanPipeline checks that a second run reuses cached LLM results, so only the first run calls the model.
 func TestIncrementalRescanPipeline(t *testing.T) {
 	tempDir := t.TempDir()
 	outDir := filepath.Join(t.TempDir(), "out")

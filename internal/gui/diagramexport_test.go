@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagramexport_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests that ExportDiagramSVG writes a well-formed SVG for a normal layout and for an empty one.
+
 package gui
 
 import (
@@ -6,6 +11,7 @@ import (
 	"testing"
 )
 
+// TestExportDiagramSVG exports a three-node layout and checks the svg element, a label, an edge line and the closing tag.
 func TestExportDiagramSVG(t *testing.T) {
 	layout := DiagramLayout{
 		Nodes: []DiagramNode{
@@ -48,6 +54,7 @@ func TestExportDiagramSVG(t *testing.T) {
 	}
 }
 
+// TestExportDiagramSVGEmpty checks that an empty layout still produces a valid SVG file.
 func TestExportDiagramSVGEmpty(t *testing.T) {
 	tmp := t.TempDir()
 	outPath := tmp + "/empty.svg"

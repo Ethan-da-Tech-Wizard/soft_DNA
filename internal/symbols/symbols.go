@@ -1,3 +1,8 @@
+// Program: soft_DNA - symbols.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Extracts functions, methods, classes/types and imports from source files in ten languages (Go via its parser, the others via line-based patterns), in parallel and with optional reuse of cached results.
+
 // Package symbols extracts simple source symbols without executing target code.
 package symbols
 
@@ -30,6 +35,7 @@ type Symbol struct {
 }
 
 var (
+	// Line patterns for each supported language, grouped by language prefix (py, js, cpp, c, rs, rb, r, sw, sql); each captures the symbol name and, where useful, its parameters.
 	pyImportRe   = regexp.MustCompile(`^(?:from\s+([A-Za-z0-9_./]+)\s+import\s+(.+)|import\s+(.+))`)
 	pyDefRe      = regexp.MustCompile(`^(class|def)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(\(.*)?`)
 	jsImportRe   = regexp.MustCompile(`^import\s+(.+)`)
@@ -87,6 +93,7 @@ func joinUnclosed(lines []string, i int) (string, int) {
 
 // ExtractAll extracts symbols for supported files in parallel using a worker pool.
 func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
+	// Use one worker per CPU core (at least one) to extract files in parallel.
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
 		numWorkers = 1
@@ -102,6 +109,7 @@ func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
 		index   int
 	}
 
+	// Both channels are buffered to the number of files, so producers and workers never block on each other.
 	tasks := make(chan task, len(files))
 	results := make(chan result, len(files))
 
@@ -130,6 +138,7 @@ func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
 		out = append(out, res.symbols...)
 	}
 
+	// Results arrive in any order, so sort by file, line, kind and name to keep the output deterministic.
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
 			return out[i].File < out[j].File
@@ -147,6 +156,7 @@ func ExtractAll(root string, files []scanner.FileInfo) []Symbol {
 
 // ExtractAllIncremental extracts symbols in parallel, reusing cachedSymbols if ContentHash matches cachedHashes.
 func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes map[string]string, cachedSymbols map[string][]Symbol) []Symbol {
+	// Use one worker per CPU core (at least one) to extract files in parallel.
 	numWorkers := runtime.NumCPU()
 	if numWorkers < 1 {
 		numWorkers = 1
@@ -162,6 +172,7 @@ func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes m
 		index   int
 	}
 
+	// Both channels are buffered to the number of files, so producers and workers never block on each other.
 	tasks := make(chan task, len(files))
 	results := make(chan result, len(files))
 
@@ -171,6 +182,7 @@ func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes m
 		go func() {
 			defer wg.Done()
 			for t := range tasks {
+				// Reuse the cached symbols when the file's content hash is unchanged; otherwise extract again.
 				if cachedHash, ok := cachedHashes[t.file.Path]; ok && cachedHash == t.file.ContentHash {
 					if syms, ok := cachedSymbols[t.file.Path]; ok {
 						results <- result{symbols: syms, index: t.index}
@@ -196,6 +208,7 @@ func ExtractAllIncremental(root string, files []scanner.FileInfo, cachedHashes m
 		out = append(out, res.symbols...)
 	}
 
+	// Results arrive in any order, so sort by file, line, kind and name to keep the output deterministic.
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].File != out[j].File {
 			return out[i].File < out[j].File
@@ -223,6 +236,7 @@ func Extract(root string, file scanner.FileInfo) []Symbol {
 		return nil
 	}
 
+	// Pick the extractor that matches the language detected by the scanner.
 	switch file.Language {
 	case "Go":
 		return extractGo(file.Path, data)
@@ -249,6 +263,7 @@ func Extract(root string, file scanner.FileInfo) []Symbol {
 	}
 }
 
+// extractGo parses Go source with the standard parser and returns its types, imports, functions and methods with line ranges; a file that does not parse yields no symbols.
 func extractGo(path string, data []byte) []Symbol {
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, data, parser.ParseComments)
@@ -303,6 +318,7 @@ func extractGo(path string, data []byte) []Symbol {
 	return out
 }
 
+// goSignature builds a short signature string from a function name and its parameter names (types are not included).
 func goSignature(name string, fn *ast.FuncDecl) string {
 	var b strings.Builder
 	b.WriteString("func ")
@@ -321,6 +337,7 @@ func goSignature(name string, fn *ast.FuncDecl) string {
 	return b.String()
 }
 
+// extractPython scans Python lines for imports, classes and defs, joining multi-line signatures.
 func extractPython(path string, data []byte) []Symbol {
 	var out []Symbol
 	lines := strings.Split(string(data), "\n")
@@ -360,6 +377,7 @@ func extractPython(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractJS scans JavaScript and TypeScript lines for imports, functions, classes and arrow-function constants.
 func extractJS(path string, data []byte) []Symbol {
 	var out []Symbol
 	lines := strings.Split(string(data), "\n")
@@ -392,6 +410,7 @@ func extractJS(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractRuby scans Ruby lines for require/load imports, methods, classes and modules.
 func extractRuby(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -417,6 +436,7 @@ func extractRuby(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractSQL scans SQL lines for CREATE TABLE, VIEW and PROCEDURE statements.
 func extractSQL(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -442,6 +462,7 @@ func extractSQL(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractSwift scans Swift lines for imports, functions and class, struct, enum or protocol types.
 func extractSwift(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -467,6 +488,7 @@ func extractSwift(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractR scans R lines for library/require imports and function definitions.
 func extractR(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -488,6 +510,7 @@ func extractR(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractRust scans Rust lines for use imports, functions and struct, enum, union or trait types.
 func extractRust(path string, data []byte) []Symbol {
 	var out []Symbol
 	lines := strings.Split(string(data), "\n")
@@ -516,6 +539,7 @@ func extractRust(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractC scans C lines for includes, struct/union/enum types and function definitions or prototypes.
 func extractC(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))
@@ -547,6 +571,7 @@ func extractC(path string, data []byte) []Symbol {
 	return out
 }
 
+// extractCPP scans C++ lines for includes, classes, structs and functions.
 func extractCPP(path string, data []byte) []Symbol {
 	var out []Symbol
 	sc := bufio.NewScanner(bytes.NewReader(data))

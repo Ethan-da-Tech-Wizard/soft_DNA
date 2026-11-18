@@ -1,3 +1,8 @@
+// Program: soft_DNA - settings_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests settings persistence (save/load round trip, defaults, corrupt file), LLM configuration validation, and the automatic inference timeout rules.
+
 package gui
 
 import (
@@ -7,6 +12,7 @@ import (
 	"time"
 )
 
+// TestSettingsSaveAndLoadRoundTrip saves settings into a temporary config directory and checks that loading returns the same values.
 func TestSettingsSaveAndLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	orig := configDir
@@ -28,6 +34,7 @@ func TestSettingsSaveAndLoadRoundTrip(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsDefaultsWhenMissing checks that with no settings file the LLM is off and the thread count is positive.
 func TestLoadSettingsDefaultsWhenMissing(t *testing.T) {
 	orig := configDir
 	configDir = func() (string, error) { return t.TempDir(), nil }
@@ -42,6 +49,7 @@ func TestLoadSettingsDefaultsWhenMissing(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsDefaultsOnCorruptFile checks that an unreadable settings file falls back to defaults instead of failing.
 func TestLoadSettingsDefaultsOnCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 	orig := configDir
@@ -61,12 +69,14 @@ func TestLoadSettingsDefaultsOnCorruptFile(t *testing.T) {
 	}
 }
 
+// TestValidateLLMConfigDisabledIsAlwaysFine checks that validation reports nothing while the LLM is disabled.
 func TestValidateLLMConfigDisabledIsAlwaysFine(t *testing.T) {
 	if got := validateLLMConfig(Settings{LLMEnabled: false}); got != nil {
 		t.Fatalf("validateLLMConfig(disabled) = %v, want nil", got)
 	}
 }
 
+// TestValidateLLMConfigFlagsEmptyPaths checks that empty binary and model paths each produce a problem.
 func TestValidateLLMConfigFlagsEmptyPaths(t *testing.T) {
 	got := validateLLMConfig(Settings{LLMEnabled: true})
 	if len(got) != 2 {
@@ -74,6 +84,7 @@ func TestValidateLLMConfigFlagsEmptyPaths(t *testing.T) {
 	}
 }
 
+// TestValidateLLMConfigFlagsMissingFiles checks that paths pointing at non-existent files each produce a problem.
 func TestValidateLLMConfigFlagsMissingFiles(t *testing.T) {
 	got := validateLLMConfig(Settings{LLMEnabled: true, LLMBinary: "/no/such/binary", LLMModel: "/no/such/model.gguf"})
 	if len(got) != 2 {
@@ -81,6 +92,7 @@ func TestValidateLLMConfigFlagsMissingFiles(t *testing.T) {
 	}
 }
 
+// TestValidateLLMConfigPassesWithRealFiles checks that existing binary and model files produce no problems.
 func TestValidateLLMConfigPassesWithRealFiles(t *testing.T) {
 	dir := t.TempDir()
 	binPath := filepath.Join(dir, "llama-cli")
@@ -98,6 +110,7 @@ func TestValidateLLMConfigPassesWithRealFiles(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsDefaultsMaxFilesTenWhenMissing checks that the max-files default is 10 when no settings file exists.
 func TestLoadSettingsDefaultsMaxFilesTenWhenMissing(t *testing.T) {
 	orig := configDir
 	configDir = func() (string, error) { return t.TempDir(), nil }
@@ -108,6 +121,7 @@ func TestLoadSettingsDefaultsMaxFilesTenWhenMissing(t *testing.T) {
 	}
 }
 
+// TestLoadSettingsPreservesExplicitZeroMaxFiles checks that a saved max-files value of 0 (no limit) is not replaced by the default.
 func TestLoadSettingsPreservesExplicitZeroMaxFiles(t *testing.T) {
 	dir := t.TempDir()
 	orig := configDir
@@ -122,6 +136,7 @@ func TestLoadSettingsPreservesExplicitZeroMaxFiles(t *testing.T) {
 	}
 }
 
+// TestEffectiveLLMTimeoutExplicitSettingWins checks that a user-set timeout is used as is.
 func TestEffectiveLLMTimeoutExplicitSettingWins(t *testing.T) {
 	s := Settings{LLMTimeoutSec: 55}
 	if got := s.EffectiveLLMTimeout(); got != 55*time.Second {
@@ -129,6 +144,7 @@ func TestEffectiveLLMTimeoutExplicitSettingWins(t *testing.T) {
 	}
 }
 
+// TestEffectiveLLMTimeoutSmallOrMissingModel checks that a missing or small model file gets the 120 second default.
 func TestEffectiveLLMTimeoutSmallOrMissingModel(t *testing.T) {
 	// Missing model file: fall back to the small-model default.
 	s := Settings{LLMModel: "/no/such/model.gguf"}
@@ -147,6 +163,7 @@ func TestEffectiveLLMTimeoutSmallOrMissingModel(t *testing.T) {
 	}
 }
 
+// TestEffectiveLLMTimeoutLargeModelGetsMinutes checks that a model file of 3 GiB or more gets the 420 second default.
 func TestEffectiveLLMTimeoutLargeModelGetsMinutes(t *testing.T) {
 	// A sparse file of 3 GiB: no real disk usage, but Stat reports the size.
 	big := filepath.Join(t.TempDir(), "qwen7b.gguf")

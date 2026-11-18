@@ -1,3 +1,8 @@
+// Program: soft_DNA - grounding.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Reads verified facts (root, file count, stack, entry points, top symbols, folder roles) back out of the SQLite index so prompts can be built only from checked data.
+
 // Package grounding compiles verified facts from codelens.db into structured
 // prompting contexts for the M6 hybrid LLM summarization pass.
 // All data flows strictly from SQLite into the context; the LLM may only

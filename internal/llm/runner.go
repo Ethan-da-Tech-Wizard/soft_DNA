@@ -1,3 +1,8 @@
+// Program: soft_DNA - runner.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Runs the local llama-cli subprocess with a prompt and grammar, enforcing a timeout and an output size cap, and streams the JSON answer text to an optional callback.
+
 // Package llm runs a local llama.cpp subprocess and returns its JSON output.
 // It is the only pipeline component that spawns a child process; all other
 // stages are pure in-process computation (G-1 exemption: the target project
@@ -16,6 +21,7 @@ import (
 	"time"
 )
 
+// grammarsFS holds the GBNF grammar files compiled into the binary so they ship with it.
 //go:embed grammars/*.gbnf
 var grammarsFS embed.FS
 
@@ -69,6 +75,7 @@ type limitedWriter struct {
 	err     error
 }
 
+// Write appends p unless doing so would pass the limit; the first overflow is remembered and every later write fails too.
 func (w *limitedWriter) Write(p []byte) (int, error) {
 	if w.err != nil {
 		return 0, w.err
@@ -103,6 +110,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 		return nil, fmt.Errorf("llm: model not found: %w", err)
 	}
 
+	// Build the llama-cli command line; the grammar and GPU flags are only added when configured.
 	args := make([]string, 0, 14)
 	args = append(args, "--model", cfg.ModelPath)
 	if cfg.GrammarPath != "" {
@@ -119,6 +127,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 		"-p", prompt,
 	)
 
+	// Wrap the caller's context with a deadline when a timeout is configured.
 	runCtx := ctx
 	cancel := func() {}
 	if cfg.Timeout > 0 {
@@ -126,6 +135,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 	}
 	defer cancel()
 
+	// Stdout is read through a pipe so output can be streamed; stderr is captured only for error messages.
 	cmd := exec.CommandContext(runCtx, cfg.BinaryPath, args...)
 	out := &limitedWriter{limit: cfg.MaxOutputBytes}
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -139,6 +149,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 		return nil, err
 	}
 
+	// Read stdout in 1 KB chunks, enforce the size cap, and feed each chunk to the answer streamer when a callback is set.
 	buf := make([]byte, 1024)
 	state := 0 // 0: searching key, 1: searching start quote, 2: capturing content
 	keyBuf := ""
@@ -161,6 +172,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 		}
 	}
 
+	// Report the most specific failure: output overflow first, then timeout, then any other exit error.
 	if err := cmd.Wait(); err != nil {
 		if out.err != nil {
 			return nil, out.err
@@ -179,6 +191,7 @@ func Run(ctx context.Context, cfg Config, prompt string) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// parseAnswerStream is a small state machine over streamed JSON bytes that finds the "answer" key and passes the characters of its string value to tokenCallback, decoding common escapes. state is 0 while looking for the key, 1 while waiting for the opening quote, 2 while copying the value, and 4 once the closing quote is seen.
 func parseAnswerStream(chunk []byte, state *int, keyBuf *string, escaped *bool, tokenCallback func(string)) {
 	for _, b := range chunk {
 		switch *state {

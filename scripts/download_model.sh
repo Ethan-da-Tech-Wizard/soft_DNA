@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Program: soft_DNA - download_model.sh
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Downloads a quantized GGUF language model from Hugging Face into the local model folder, with resume and retry support, using curl or wget.
 # download_model.sh — Download a quantized GGUF model for CodeLens Local.
 #
 # Usage:

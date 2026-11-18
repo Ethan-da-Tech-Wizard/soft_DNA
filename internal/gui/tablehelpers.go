@@ -1,3 +1,8 @@
+// Program: soft_DNA - tablehelpers.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Helpers that build sortable, filterable Fyne tables used by the report tabs.
+
 package gui
 
 import (
@@ -24,10 +29,12 @@ var wideColumns = map[string]struct{}{
 // Tapping a header cell sorts by that column (string comparison, toggling
 // ascending/descending), with a ▲/▼ marker on the active column.
 func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]string)) {
+	// current is the row set being displayed; sortCol is the sorted column (-1 for none) and sortAsc its direction.
 	current := rows
 	sortCol := -1
 	sortAsc := true
 
+	// headerText returns a column title, adding an up or down marker on the sorted column.
 	headerText := func(col int) string {
 		switch {
 		case col != sortCol:
@@ -39,6 +46,7 @@ func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]st
 		}
 	}
 
+	// Table callbacks: size (data rows plus one header row), a template cell, and the cell filler.
 	table := widget.NewTable(
 		func() (int, int) { return len(current) + 1, len(headers) },
 		func() fyne.CanvasObject { return widget.NewLabel("") },
@@ -53,6 +61,7 @@ func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]st
 			label.SetText(current[id.Row-1][id.Col])
 		},
 	)
+	// Give long free-text columns more width than short identifier columns.
 	for i, h := range headers {
 		width := float32(140)
 		if _, ok := wideColumns[strings.ToLower(h)]; ok {
@@ -61,6 +70,7 @@ func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]st
 		table.SetColumnWidth(i, width)
 	}
 
+	// Selecting a header cell sorts by that column; any selection is cleared right away so the table never keeps a highlight.
 	table.OnSelected = func(id widget.TableCellID) {
 		table.UnselectAll()
 		if id.Row != 0 || len(current) < 2 {
@@ -72,6 +82,7 @@ func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]st
 			sortCol, sortAsc = id.Col, true
 		}
 		col, asc := sortCol, sortAsc
+		// Stable sort keeps the original order for equal values.
 		sort.SliceStable(current, func(i, j int) bool {
 			if asc {
 				return current[i][col] < current[j][col]
@@ -81,6 +92,7 @@ func newLiveTable(headers []string, rows [][]string) (*widget.Table, func([][]st
 		table.Refresh()
 	}
 
+	// setRows swaps in new rows (for live filtering) and resets the sort state.
 	setRows := func(newRows [][]string) {
 		current = newRows
 		sortCol = -1

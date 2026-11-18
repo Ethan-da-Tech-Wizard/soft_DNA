@@ -1,3 +1,8 @@
+// Program: soft_DNA - scanner_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the file scanner: deterministic inventories, ignore rules, skipped large, binary and symlinked files, language detection, and the sample fixtures.
+
 package scanner
 
 import (
@@ -7,6 +12,7 @@ import (
 	"testing"
 )
 
+// TestScanInventoriesTextFilesDeterministically checks that scanning the same project twice gives identical, sorted results.
 func TestScanInventoriesTextFilesDeterministically(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "b.py", "print('b')\n")
@@ -37,6 +43,7 @@ func TestScanInventoriesTextFilesDeterministically(t *testing.T) {
 	}
 }
 
+// TestScanRespectsGitignoreAndExtraIgnores checks that both .gitignore patterns and caller-supplied patterns exclude files.
 func TestScanRespectsGitignoreAndExtraIgnores(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, ".gitignore", "ignored.txt\nlogs/\n")
@@ -57,6 +64,7 @@ func TestScanRespectsGitignoreAndExtraIgnores(t *testing.T) {
 	}
 }
 
+// TestScanMarksLargeAndBinaryFilesSkipped checks that an oversized file and a binary file are listed but marked skipped with the right reason.
 func TestScanMarksLargeAndBinaryFilesSkipped(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "large.txt", "123456")
@@ -78,6 +86,7 @@ func TestScanMarksLargeAndBinaryFilesSkipped(t *testing.T) {
 	}
 }
 
+// TestScanDoesNotFollowOutOfRootSymlink checks that a symlink pointing outside the root is recorded as skipped (symlink_escape) rather than read.
 func TestScanDoesNotFollowOutOfRootSymlink(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.txt")
@@ -103,6 +112,7 @@ func TestScanDoesNotFollowOutOfRootSymlink(t *testing.T) {
 	}
 }
 
+// TestSampleFixturesInventory checks the exact file list found in the sample Python fixture.
 func TestSampleFixturesInventory(t *testing.T) {
 	files, err := Scan(filepath.Join("..", "..", "testdata", "sample_python"), Options{})
 	if err != nil {
@@ -116,6 +126,7 @@ func TestSampleFixturesInventory(t *testing.T) {
 	}
 }
 
+// TestDetectSQLLanguage checks that SQL files are labelled SQL.
 func TestDetectSQLLanguage(t *testing.T) {
 	got := detectLanguage(".sql", "schema.sql")
 	if got != "SQL" {
@@ -123,6 +134,7 @@ func TestDetectSQLLanguage(t *testing.T) {
 	}
 }
 
+// TestDetectSwiftLanguage checks that Swift files are labelled Swift.
 func TestDetectSwiftLanguage(t *testing.T) {
 	got := detectLanguage(".swift", "main.swift")
 	if got != "Swift" {
@@ -130,6 +142,7 @@ func TestDetectSwiftLanguage(t *testing.T) {
 	}
 }
 
+// TestDetectRLanguage checks the language labels for R file extensions.
 func TestDetectRLanguage(t *testing.T) {
 	cases := []struct {
 		ext      string
@@ -147,6 +160,7 @@ func TestDetectRLanguage(t *testing.T) {
 	}
 }
 
+// TestDetectCPPAndCMakeLanguages checks the language labels for C++ extensions and for CMakeLists.txt.
 func TestDetectCPPAndCMakeLanguages(t *testing.T) {
 	cases := []struct {
 		ext      string
@@ -169,6 +183,7 @@ func TestDetectCPPAndCMakeLanguages(t *testing.T) {
 	}
 }
 
+// TestScanCFixture checks the language labels of the sample C project's files.
 func TestScanCFixture(t *testing.T) {
 	files, err := Scan(filepath.Join("..", "..", "testdata", "sample_c"), Options{})
 	if err != nil {
@@ -187,6 +202,7 @@ func TestScanCFixture(t *testing.T) {
 	}
 }
 
+// TestScanCPPFixture checks the language labels of the sample C++ project's files.
 func TestScanCPPFixture(t *testing.T) {
 	files, err := Scan(filepath.Join("..", "..", "testdata", "sample_cpp"), Options{})
 	if err != nil {
@@ -205,6 +221,7 @@ func TestScanCPPFixture(t *testing.T) {
 	}
 }
 
+// paths returns the Path of each FileInfo, in order.
 func paths(files []FileInfo) []string {
 	out := make([]string, 0, len(files))
 	for _, file := range files {
@@ -213,6 +230,7 @@ func paths(files []FileInfo) []string {
 	return out
 }
 
+// mapByPath indexes FileInfo values by their path for easy lookup.
 func mapByPath(files []FileInfo) map[string]FileInfo {
 	out := make(map[string]FileInfo, len(files))
 	for _, file := range files {
@@ -221,6 +239,7 @@ func mapByPath(files []FileInfo) map[string]FileInfo {
 	return out
 }
 
+// writeFile writes a file (creating folders as needed) under root for a test, failing the test on error.
 func writeFile(t *testing.T, root, rel, content string) {
 	t.Helper()
 	path := filepath.Join(root, filepath.FromSlash(rel))
@@ -232,6 +251,7 @@ func writeFile(t *testing.T, root, rel, content string) {
 	}
 }
 
+// TestScanIgnoresToolCacheDirectories checks that tool cache folders such as the pytest, mypy and ruff caches are not scanned.
 func TestScanIgnoresToolCacheDirectories(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "main.py", "print('hi')\n")

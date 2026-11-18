@@ -1,3 +1,8 @@
+// Program: soft_DNA - settings.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Defines the persisted GUI settings (LLM options, last project), JSON load/save, validation, and detection of the llama-cli binary and local model files.
+
 // Package gui implements CodeLens Local's native desktop window (Fyne).
 // It is a thin presentation layer over internal/cli's exported pipeline API
 // (RunPipeline, WriteMarkdownReport, Answer) — no scanning, indexing, or LLM
@@ -42,6 +47,7 @@ type Settings struct {
 // tests can redirect it without touching the real home directory.
 var configDir = os.UserConfigDir
 
+// settingsPath returns where the settings JSON file lives inside the OS user config directory.
 func settingsPath() (string, error) {
 	dir, err := configDir()
 	if err != nil {
@@ -54,6 +60,7 @@ func settingsPath() (string, error) {
 // missing or unreadable file is not an error; it yields sane defaults
 // (LLM disabled, thread count matching the machine).
 func LoadSettings() Settings {
+	// Defaults used when no valid settings file exists.
 	defaults := Settings{LLMThreads: runtime.NumCPU(), LLMMaxFiles: 10}
 
 	path, err := settingsPath()
@@ -142,6 +149,7 @@ func (s Settings) Save() error {
 	return os.WriteFile(path, data, 0o644)
 }
 
+// autoDetectLlamaCli looks for the llama-cli binary next to the app, in the app's own bin folder under the user's home directory, then on PATH; it returns an empty string if none is found.
 func autoDetectLlamaCli() string {
 	var binName string
 	if runtime.GOOS == "windows" {
@@ -210,6 +218,7 @@ func ScanLocalModels() []string {
 		}
 	}
 
+	// Newest model file first.
 	sort.Slice(found, func(i, j int) bool {
 		return found[i].mtime.After(found[j].mtime)
 	})

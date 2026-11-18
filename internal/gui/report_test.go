@@ -1,3 +1,8 @@
+// Program: soft_DNA - report_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the report tabs and related GUI pieces headlessly: tab order, empty results, AI summary messages, symbol filtering, diagram views, the log ring buffer, role colours, settings and the file watcher lifecycle.
+
 package gui
 
 import (
@@ -29,6 +34,7 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// samplePipelineResult builds a small in-memory pipeline result used as input by the report tests.
 func samplePipelineResult() cli.PipelineResult {
 	return cli.PipelineResult{
 		Root:   "/project",
@@ -50,6 +56,7 @@ func samplePipelineResult() cli.PipelineResult {
 	}
 }
 
+// TestBuildReportTabsHasExpectedTabsInOrder checks that the report has the expected tabs, in order, each with content.
 func TestBuildReportTabsHasExpectedTabsInOrder(t *testing.T) {
 	res := samplePipelineResult()
 	a := &App{}
@@ -76,6 +83,7 @@ func TestBuildReportTabsHasExpectedTabsInOrder(t *testing.T) {
 	}
 }
 
+// TestBuildReportTabsHandlesEmptyResult checks that an empty pipeline result still builds a tab view.
 func TestBuildReportTabsHandlesEmptyResult(t *testing.T) {
 	a := &App{}
 	if got := a.buildReportTabs(cli.PipelineResult{}); got == nil {
@@ -83,6 +91,7 @@ func TestBuildReportTabsHandlesEmptyResult(t *testing.T) {
 	}
 }
 
+// TestNewAISummariesTabDisabledShowsPlaceholder checks that the AI tab renders something when the LLM pass is off.
 func TestNewAISummariesTabDisabledShowsPlaceholder(t *testing.T) {
 	res := samplePipelineResult() // LLM zero-value: Enabled=false
 	if got := (&App{}).newAISummariesTab(res); got == nil {
@@ -90,6 +99,7 @@ func TestNewAISummariesTabDisabledShowsPlaceholder(t *testing.T) {
 	}
 }
 
+// TestNewAISummariesTabRendersOverviewAndFiles checks that the AI tab renders when an overview and file summaries are present.
 func TestNewAISummariesTabRendersOverviewAndFiles(t *testing.T) {
 	res := samplePipelineResult()
 	res.LLM = cli.LLMResult{
@@ -108,6 +118,7 @@ func TestNewAISummariesTabRendersOverviewAndFiles(t *testing.T) {
 	}
 }
 
+// TestFilterSymbolsByNameAndFile checks that symbol filtering ignores blank queries, is case-insensitive, and matches by name or by file path.
 func TestFilterSymbolsByNameAndFile(t *testing.T) {
 	all := []symbols.Symbol{
 		{File: "main.go", Name: "main"},
@@ -132,12 +143,14 @@ func TestFilterSymbolsByNameAndFile(t *testing.T) {
 	}
 }
 
+// TestNewDiagramViewDoesNotPanicOnEmptyInputs checks that the diagram view can be built from empty inputs.
 func TestNewDiagramViewDoesNotPanicOnEmptyInputs(t *testing.T) {
 	if got := newDiagramView(nil, stackdetect.Report{}, nil, nil, 1.0, "", func(string) {}); got == nil {
 		t.Fatal("newDiagramView returned nil")
 	}
 }
 
+// TestNewDiagramTabBuildsWithZoomControls checks that the diagram tab with its zoom controls can be built without a window.
 func TestNewDiagramTabBuildsWithZoomControls(t *testing.T) {
 	a := &App{pathEntry: widget.NewEntry(), watchCheck: widget.NewCheck("Watch", nil)}
 	if got := a.newDiagramTab(cli.PipelineResult{}, nil, stackdetect.Report{}, nil, nil); got == nil {
@@ -145,6 +158,7 @@ func TestNewDiagramTabBuildsWithZoomControls(t *testing.T) {
 	}
 }
 
+// TestNewAskTabBuildsWithoutWindow checks that the Ask tab can be built without a window, since it only touches the window inside its Send callback.
 func TestNewAskTabBuildsWithoutWindow(t *testing.T) {
 	// newAskTab must not touch a.win/a.fyneApp at construction time, only
 	// inside its Send callback — otherwise every headless test would need a
@@ -171,6 +185,7 @@ func walkLabels(obj fyne.CanvasObject, out *[]string) {
 	}
 }
 
+// labelsContain reports whether any label inside obj contains the wanted text.
 func labelsContain(obj fyne.CanvasObject, want string) bool {
 	var texts []string
 	walkLabels(obj, &texts)
@@ -182,6 +197,7 @@ func labelsContain(obj fyne.CanvasObject, want string) bool {
 	return false
 }
 
+// TestAISummariesTabExplainsSkippedPass checks that when AI was enabled but never ran, the tab shows the pipeline's warning.
 func TestAISummariesTabExplainsSkippedPass(t *testing.T) {
 	// User enabled AI, but the pass never ran (e.g. missing binary):
 	// the tab must show the pipeline's warning, not a generic "off" message.
@@ -195,6 +211,7 @@ func TestAISummariesTabExplainsSkippedPass(t *testing.T) {
 	}
 }
 
+// TestAISummariesTabExplainsTimeouts checks that when every model call timed out, the tab says so and points to the timeout setting.
 func TestAISummariesTabExplainsTimeouts(t *testing.T) {
 	// The pass ran but every call timed out: the tab must say so and point
 	// at the timeout setting, using the tallies from the diagnostic stream.
@@ -208,6 +225,7 @@ func TestAISummariesTabExplainsTimeouts(t *testing.T) {
 	}
 }
 
+// TestAISummariesTabExplainsValidationFailures checks that when the model ran but its output failed validation, the tab explains that.
 func TestAISummariesTabExplainsValidationFailures(t *testing.T) {
 	a := &App{settings: Settings{LLMEnabled: true, LLMModel: "model.gguf", LLMBinary: "llama-cli"}, scanFailedTurns: 4}
 	res := samplePipelineResult()
@@ -219,6 +237,7 @@ func TestAISummariesTabExplainsValidationFailures(t *testing.T) {
 	}
 }
 
+// TestAppLoggingRingBuffer checks that the on-screen log keeps at most 500 lines and adds an earlier-lines-omitted note only after that limit is passed.
 func TestAppLoggingRingBuffer(t *testing.T) {
 	a := &App{
 		logView:   widget.NewLabel(""),
@@ -249,6 +268,7 @@ func TestAppLoggingRingBuffer(t *testing.T) {
 	}
 }
 
+// TestNewAISummariesTabFirstRunCard checks that with no model configured the tab shows the first-run AI setup card.
 func TestNewAISummariesTabFirstRunCard(t *testing.T) {
 	// If LLMModel is empty, the tab must render the first-run Setup AI card
 	a := &App{settings: Settings{LLMModel: ""}}
@@ -260,6 +280,7 @@ func TestNewAISummariesTabFirstRunCard(t *testing.T) {
 	}
 }
 
+// TestDiagramInteractiveNavigationAndColors checks the role colours chosen for diagram nodes and the folder drill-down navigation.
 func TestDiagramInteractiveNavigationAndColors(t *testing.T) {
 	// 1. Check roleColor mappings
 	if col := roleColor("root"); col != colorRoot {
@@ -333,6 +354,7 @@ func TestDiagramInteractiveNavigationAndColors(t *testing.T) {
 	}
 }
 
+// TestSettingsGPULayersAndModelWarning checks that the GPU layers setting is kept and that a very large model file gets the long default timeout.
 func TestSettingsGPULayersAndModelWarning(t *testing.T) {
 	s := Settings{
 		LLMGPULayers:  16,
@@ -361,6 +383,7 @@ func TestSettingsGPULayersAndModelWarning(t *testing.T) {
 	}
 }
 
+// TestAppWatcherLifecycle checks that the file watcher is created when Watch is ticked and cleaned up when it is unticked.
 func TestAppWatcherLifecycle(t *testing.T) {
 	a := &App{
 		pathEntry:  widget.NewEntry(),

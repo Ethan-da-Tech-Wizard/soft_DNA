@@ -1,3 +1,8 @@
+// Program: soft_DNA - store_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the SQLite index: full-text search over sample projects, natural-language queries, idempotent rebuilds, symbol indexing, and repeated schema creation.
+
 package index
 
 import (
@@ -9,6 +14,7 @@ import (
 	"codelens-local/internal/symbols"
 )
 
+// TestStoreBuildsFTSIndex indexes the sample Python project and checks that a keyword search returns the expected file.
 func TestStoreBuildsFTSIndex(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -32,6 +38,7 @@ func TestStoreBuildsFTSIndex(t *testing.T) {
 	}
 }
 
+// TestSearchAcceptsNaturalLanguageQuery checks that a plain-English question is turned into a working search and returns the expected file.
 func TestSearchAcceptsNaturalLanguageQuery(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -55,6 +62,7 @@ func TestSearchAcceptsNaturalLanguageQuery(t *testing.T) {
 	}
 }
 
+// TestStoreRebuildIsIdempotent rebuilds the same index repeatedly and checks that the stored counts do not grow.
 func TestStoreRebuildIsIdempotent(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_node")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -87,6 +95,7 @@ func TestStoreRebuildIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestStoreIndexesSymbolsForSearch checks that extracted symbols are stored and counted so they can be found by search.
 func TestStoreIndexesSymbolsForSearch(t *testing.T) {
 	root := filepath.Join("..", "..", "testdata", "sample_python")
 	files, err := scanner.Scan(root, scanner.Options{})
@@ -118,6 +127,7 @@ func TestStoreIndexesSymbolsForSearch(t *testing.T) {
 	}
 }
 
+// TestStoreSchemaCanInitializeTwice checks that calling Init more than once on the same database succeeds.
 func TestStoreSchemaCanInitializeTwice(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "codelens.db")
 
@@ -136,6 +146,7 @@ func TestStoreSchemaCanInitializeTwice(t *testing.T) {
 	}
 }
 
+// openTestStore opens a fresh database in a temporary folder and initialises its schema for a test.
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
 

@@ -1,3 +1,8 @@
+// Program: soft_DNA - validate_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests the validate package: text sanitising, rune-safe truncation, file/project/ask validation rules, the symbol allowlist, and the error type.
+
 package validate
 
 import (
@@ -7,6 +12,7 @@ import (
 
 // ---- sanitizeText unit tests ----
 
+// TestSanitizeTextStripsAbsolutePaths checks that absolute file paths are removed from prose.
 func TestSanitizeTextStripsAbsolutePaths(t *testing.T) {
 	cases := []struct {
 		input string
@@ -25,6 +31,7 @@ func TestSanitizeTextStripsAbsolutePaths(t *testing.T) {
 	}
 }
 
+// TestSanitizeTextStripsURLs checks that URLs are removed from prose.
 func TestSanitizeTextStripsURLs(t *testing.T) {
 	cases := []struct {
 		input string
@@ -42,6 +49,7 @@ func TestSanitizeTextStripsURLs(t *testing.T) {
 	}
 }
 
+// TestSanitizeTextStripsBacktickedCode checks that backtick-quoted code spans are removed from prose.
 func TestSanitizeTextStripsBacktickedCode(t *testing.T) {
 	// Backtick (ASCII 0x60) written as \x60 so the literal is preserved
 	// regardless of how this file is processed by tooling.
@@ -66,6 +74,7 @@ func TestSanitizeTextStripsBacktickedCode(t *testing.T) {
 	}
 }
 
+// TestSanitizeTextStripsMultiplePatterns checks that paths, URLs and code spans are all removed from one string.
 func TestSanitizeTextStripsMultiplePatterns(t *testing.T) {
 	// A string containing all three injection types at once.
 	// Backtick written as \x60 to survive tooling that may strip literal backticks.
@@ -87,6 +96,7 @@ func TestSanitizeTextStripsMultiplePatterns(t *testing.T) {
 	}
 }
 
+// TestSanitizeTextTrimsWhitespace checks that leading and trailing whitespace is trimmed.
 func TestSanitizeTextTrimsWhitespace(t *testing.T) {
 	got := sanitizeText("  hello world  ")
 	if got != "hello world" {
@@ -94,6 +104,7 @@ func TestSanitizeTextTrimsWhitespace(t *testing.T) {
 	}
 }
 
+// TestSanitizeTextEmptyString checks that an empty string stays empty.
 func TestSanitizeTextEmptyString(t *testing.T) {
 	if got := sanitizeText(""); got != "" {
 		t.Errorf("sanitizeText(\"\") = %q, want empty", got)
@@ -102,6 +113,7 @@ func TestSanitizeTextEmptyString(t *testing.T) {
 
 // ---- truncateRunes unit tests ----
 
+// TestTruncateRunesBelowLimit checks that a string shorter than the limit is returned unchanged.
 func TestTruncateRunesBelowLimit(t *testing.T) {
 	s, truncated := truncateRunes("hello", 10)
 	if truncated {
@@ -112,6 +124,7 @@ func TestTruncateRunesBelowLimit(t *testing.T) {
 	}
 }
 
+// TestTruncateRunesAtExactLimit checks that a string exactly at the limit is returned unchanged.
 func TestTruncateRunesAtExactLimit(t *testing.T) {
 	s, truncated := truncateRunes("hello", 5)
 	if truncated {
@@ -122,6 +135,7 @@ func TestTruncateRunesAtExactLimit(t *testing.T) {
 	}
 }
 
+// TestTruncateRunesExceedsLimit checks that a longer string is cut and ends with the ellipsis marker.
 func TestTruncateRunesExceedsLimit(t *testing.T) {
 	s, truncated := truncateRunes("hello world", 5)
 	if !truncated {
@@ -132,6 +146,7 @@ func TestTruncateRunesExceedsLimit(t *testing.T) {
 	}
 }
 
+// TestTruncateRunesHandlesMultibyteRunes checks that truncation counts characters, not bytes, so multi-byte text is not corrupted.
 func TestTruncateRunesHandlesMultibyteRunes(t *testing.T) {
 	// "日本語" is 3 runes; truncating to 2 should yield "日本…" not corrupt bytes.
 	s, truncated := truncateRunes("日本語テスト", 2)
@@ -145,6 +160,7 @@ func TestTruncateRunesHandlesMultibyteRunes(t *testing.T) {
 
 // ---- ValidateFileExplanation tests ----
 
+// TestValidateFileExplanationValidJSON checks that well-formed JSON with allowed symbols is accepted with no errors.
 func TestValidateFileExplanationValidJSON(t *testing.T) {
 	raw := []byte(`{
 		"file_summary": "Scans the file system for source files.",
@@ -169,6 +185,7 @@ func TestValidateFileExplanationValidJSON(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationInvalidJSON checks that invalid JSON gives one parse error and an empty result.
 func TestValidateFileExplanationInvalidJSON(t *testing.T) {
 	fe, errs := ValidateFileExplanation([]byte(`not json`), nil)
 	if len(errs) != 1 {
@@ -186,6 +203,7 @@ func TestValidateFileExplanationInvalidJSON(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationEmptyJSON checks that empty input is reported as a parse error.
 func TestValidateFileExplanationEmptyJSON(t *testing.T) {
 	_, errs := ValidateFileExplanation([]byte{}, nil)
 	if len(errs) != 1 || errs[0].Field != "json" {
@@ -193,6 +211,7 @@ func TestValidateFileExplanationEmptyJSON(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationAllowlistFiltersUnknownSymbols checks that a symbol not in the allowed list is dropped and reported once.
 func TestValidateFileExplanationAllowlistFiltersUnknownSymbols(t *testing.T) {
 	raw := []byte(`{
 		"file_summary": "A scanner.",
@@ -225,6 +244,7 @@ func TestValidateFileExplanationAllowlistFiltersUnknownSymbols(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationAllowlistEmptyList checks that an empty allowed list discards every symbol explanation.
 func TestValidateFileExplanationAllowlistEmptyList(t *testing.T) {
 	// No allowed symbols → every symbol explanation is discarded.
 	raw := []byte(`{
@@ -243,6 +263,7 @@ func TestValidateFileExplanationAllowlistEmptyList(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationSanitizesSymbolExplanations checks that paths and URLs are stripped from each symbol explanation.
 func TestValidateFileExplanationSanitizesSymbolExplanations(t *testing.T) {
 	raw := []byte(`{
 		"file_summary": "A scanner.",
@@ -263,6 +284,7 @@ func TestValidateFileExplanationSanitizesSymbolExplanations(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationSanitizesFileSummary checks that paths and code spans are stripped from the file summary.
 func TestValidateFileExplanationSanitizesFileSummary(t *testing.T) {
 	// ` is the JSON-safe encoding of backtick (U+0060).
 	raw := []byte("{\"file_summary\": \"Reads /var/log/app.log and calls `parse` to process.\",\"symbol_explanations\":[]}")
@@ -275,6 +297,7 @@ func TestValidateFileExplanationSanitizesFileSummary(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationTruncatesFileSummary checks that a summary over 500 characters is cut and reported.
 func TestValidateFileExplanationTruncatesFileSummary(t *testing.T) {
 	// Build a summary that exceeds 500 runes.
 	long := strings.Repeat("a", 600)
@@ -298,6 +321,7 @@ func TestValidateFileExplanationTruncatesFileSummary(t *testing.T) {
 	}
 }
 
+// TestValidateFileExplanationNoTruncationNeeded checks that a summary of exactly 500 characters is left untouched.
 func TestValidateFileExplanationNoTruncationNeeded(t *testing.T) {
 	// Exactly 500 runes — must not trigger truncation.
 	exactly500 := strings.Repeat("b", 500)
@@ -313,6 +337,7 @@ func TestValidateFileExplanationNoTruncationNeeded(t *testing.T) {
 
 // ---- ValidateProjectExplanation tests ----
 
+// TestValidateProjectExplanationValidJSON checks that a valid project overview is accepted.
 func TestValidateProjectExplanationValidJSON(t *testing.T) {
 	raw := []byte(`{"project_description": "This project scans Go source code."}`)
 	pe, err := ValidateProjectExplanation(raw)
@@ -324,6 +349,7 @@ func TestValidateProjectExplanationValidJSON(t *testing.T) {
 	}
 }
 
+// TestValidateProjectExplanationInvalidJSON checks that invalid JSON gives an error.
 func TestValidateProjectExplanationInvalidJSON(t *testing.T) {
 	_, err := ValidateProjectExplanation([]byte(`{bad json`))
 	if err == nil {
@@ -334,6 +360,7 @@ func TestValidateProjectExplanationInvalidJSON(t *testing.T) {
 	}
 }
 
+// TestValidateProjectExplanationSanitizesDescription checks that URLs, paths and code spans are stripped from the description.
 func TestValidateProjectExplanationSanitizesDescription(t *testing.T) {
 	raw := []byte(`{"project_description": "Fetches config from https://cdn.example.com and reads /etc/app.conf using ."}`)
 	pe, err := ValidateProjectExplanation(raw)
@@ -351,6 +378,7 @@ func TestValidateProjectExplanationSanitizesDescription(t *testing.T) {
 	}
 }
 
+// TestValidateProjectExplanationTruncatesSilently checks that a description over 1000 characters is cut without returning an error.
 func TestValidateProjectExplanationTruncatesSilently(t *testing.T) {
 	// 1100-rune description must be silently truncated; no error returned.
 	long := strings.Repeat("x", 1100)
@@ -369,6 +397,7 @@ func TestValidateProjectExplanationTruncatesSilently(t *testing.T) {
 	}
 }
 
+// TestValidateProjectExplanationNoTruncationAt1000 checks that a description of exactly 1000 characters is left untouched.
 func TestValidateProjectExplanationNoTruncationAt1000(t *testing.T) {
 	exactly1000 := strings.Repeat("y", 1000)
 	raw := []byte(`{"project_description":"` + exactly1000 + `"}`)
@@ -381,6 +410,7 @@ func TestValidateProjectExplanationNoTruncationAt1000(t *testing.T) {
 	}
 }
 
+// TestValidateProjectExplanationEmptyDescription checks that an empty description is accepted as empty.
 func TestValidateProjectExplanationEmptyDescription(t *testing.T) {
 	raw := []byte(`{"project_description": ""}`)
 	pe, err := ValidateProjectExplanation(raw)
@@ -394,6 +424,7 @@ func TestValidateProjectExplanationEmptyDescription(t *testing.T) {
 
 // ---- ValidationError.Error() test ----
 
+// TestValidationErrorString checks the text produced by ValidationError.Error.
 func TestValidationErrorString(t *testing.T) {
 	e := ValidationError{Field: "file_summary", Reason: "too long"}
 	got := e.Error()
@@ -415,6 +446,7 @@ func filterField(errs []ValidationError, target string) []ValidationError {
 	return out
 }
 
+// TestValidateAskAnswer checks that an ask answer keeps its prose and loses any URL.
 func TestValidateAskAnswer(t *testing.T) {
 	raw := []byte(`{"answer": "The CLI starts in the Run function. See https://example.com for docs."}trailing noise`)
 	aa, err := ValidateAskAnswer(raw)
@@ -429,12 +461,14 @@ func TestValidateAskAnswer(t *testing.T) {
 	}
 }
 
+// TestValidateAskAnswerRejectsInvalidJSON checks that invalid JSON gives an error.
 func TestValidateAskAnswerRejectsInvalidJSON(t *testing.T) {
 	if _, err := ValidateAskAnswer([]byte("not json")); err == nil {
 		t.Fatal("expected parse error for invalid JSON")
 	}
 }
 
+// TestValidateAskAnswerTruncatesLongAnswers checks that an overly long answer is cut to the limit.
 func TestValidateAskAnswerTruncatesLongAnswers(t *testing.T) {
 	long := strings.Repeat("a", 2000)
 	aa, err := ValidateAskAnswer([]byte(`{"answer": "` + long + `"}`))

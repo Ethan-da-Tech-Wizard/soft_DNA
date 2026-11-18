@@ -1,3 +1,8 @@
+// Program: soft_DNA - app.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Defines the main CodeLens desktop window: project picker, scan button, live log, optional file watcher, and the hand-off to the report tabs.
+
 package gui
 
 import (
@@ -75,6 +80,7 @@ func (a *App) ShowAndRun() {
 	a.win.ShowAndRun()
 }
 
+// buildContent assembles the window layout: a top bar (path, browse, scan, watch, settings), the results area and a scrolling log.
 func (a *App) buildContent() fyne.CanvasObject {
 	a.pathEntry = widget.NewEntry()
 	a.pathEntry.SetPlaceHolder("Choose a project folder to scan…")
@@ -122,6 +128,7 @@ func (a *App) buildContent() fyne.CanvasObject {
 	return container.NewBorder(top, nil, nil, nil, center)
 }
 
+// appendLog adds a line to the on-screen log, keeping only the newest 500 lines, and scrolls to the bottom.
 func (a *App) appendLog(line string) {
 	a.logLines = append(a.logLines, line)
 	if len(a.logLines) > 500 {
@@ -133,6 +140,7 @@ func (a *App) appendLog(line string) {
 	a.logScroll.ScrollToBottom()
 }
 
+// startScan validates the chosen folder, resets scan state and the UI, remembers the path in settings, and runs the scan on a background goroutine.
 func (a *App) startScan() {
 	root := a.pathEntry.Text
 	if root == "" {
@@ -161,6 +169,7 @@ func (a *App) startScan() {
 	go a.runScan(root)
 }
 
+// runScan executes the shared pipeline for root off the UI thread, tallies timeout and failed-turn lines from its log, then updates the window with the report tabs or an error (all UI changes go through fyne.Do).
 func (a *App) runScan(root string) {
 	diagOut := &lineWriter{onLine: func(line string) {
 		fyne.Do(func() {
@@ -174,6 +183,7 @@ func (a *App) runScan(root string) {
 		})
 	}}
 
+	// Output goes to a codelens-out folder inside the scanned project; LLM options come from the saved settings.
 	opts := cli.PipelineOptions{
 		Root:               root,
 		OutDir:             filepath.Join(root, "codelens-out"),
@@ -188,6 +198,7 @@ func (a *App) runScan(root string) {
 
 	res, err := cli.RunPipeline(opts, diagOut)
 
+	// On success, pre-compute the sorted symbol tables for the function and import views and refresh the watcher.
 	if err == nil {
 		a.funcSymbols, a.funcRows = prepareSymbolRows(res.Symbols, []string{"function", "method", "class", "type", "table", "view", "procedure"})
 		a.importSymbols, a.importRows = prepareSymbolRows(res.Symbols, []string{"import"})
@@ -220,6 +231,7 @@ func (a *App) runScan(root string) {
 	})
 }
 
+// updateWatcherState stops any existing file watcher and, when the Watch box is ticked, starts a new one that re-scans (debounced) after source files change.
 func (a *App) updateWatcherState() {
 	if a.watcher != nil {
 		_ = a.watcher.Close()
@@ -247,6 +259,7 @@ func (a *App) updateWatcherState() {
 	a.watcher = watcher
 	a.watchDone = make(chan struct{})
 
+	// Watch every directory except version-control, dependency, output and tool cache folders (fsnotify is not recursive).
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
@@ -261,6 +274,7 @@ func (a *App) updateWatcherState() {
 		return nil
 	})
 
+	// Event loop: debounce bursts of source-file changes into a single re-scan, and stop when done is closed.
 	go func(done chan struct{}) {
 		var timer *time.Timer
 		const debounceDur = 500 * time.Millisecond
@@ -278,6 +292,7 @@ func (a *App) updateWatcherState() {
 				}
 				if event.Has(fsnotify.Write) || event.Has(fsnotify.Create) || event.Has(fsnotify.Remove) {
 					ext := filepath.Ext(event.Name)
+					// Only changes to recognised source file types trigger a re-scan.
 					switch ext {
 					case ".go", ".py", ".js", ".ts", ".rb", ".r", ".swift", ".sql", ".rs", ".c", ".cpp", ".h":
 						if timer != nil {

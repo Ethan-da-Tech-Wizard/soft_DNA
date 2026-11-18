@@ -1,3 +1,8 @@
+// Program: soft_DNA - report.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Builds the tabbed results view (summary, stack, folders, entry points, symbols, AI summaries) and the local-model setup card, including model and llama-cli download helpers.
+
 package gui
 
 import (
@@ -50,6 +55,7 @@ func (a *App) buildReportTabs(res cli.PipelineResult) fyne.CanvasObject {
 	return tabs
 }
 
+// newSummaryTab shows the scan totals, index statistics and output folder, with a button that opens that folder.
 func (a *App) newSummaryTab(res cli.PipelineResult) fyne.CanvasObject {
 	text := fmt.Sprintf(
 		"Scanned %d files.\nDetected stack: %s.\n\nIndex: %s\n  %d files, %d symbols, %d search rows.\n\nMarkdown report and diagram were also written to:\n  %s",
@@ -79,6 +85,7 @@ func (a *App) openFolder(outDir string) {
 	}
 }
 
+// newTechStackTab lists each detected technology with its category and the manifest file that proves it.
 func newTechStackTab(res cli.PipelineResult) fyne.CanvasObject {
 	rows := make([][]string, 0, len(res.Stack.Tech))
 	for _, t := range res.Stack.Tech {
@@ -87,6 +94,7 @@ func newTechStackTab(res cli.PipelineResult) fyne.CanvasObject {
 	return newSimpleTable([]string{"Technology", "Category", "Evidence"}, rows)
 }
 
+// newFoldersTab lists each folder with its detected role and file count.
 func newFoldersTab(res cli.PipelineResult) fyne.CanvasObject {
 	rows := make([][]string, 0, len(res.Folders))
 	for _, f := range res.Folders {
@@ -95,6 +103,7 @@ func newFoldersTab(res cli.PipelineResult) fyne.CanvasObject {
 	return newSimpleTable([]string{"Folder", "Role", "Files"}, rows)
 }
 
+// newEntryPointsTab lists the detected entry-point files and the reason each was chosen.
 func newEntryPointsTab(res cli.PipelineResult) fyne.CanvasObject {
 	rows := make([][]string, 0, len(res.Entries))
 	for _, e := range res.Entries {
@@ -131,6 +140,7 @@ func prepareSymbolRows(symbolList []symbols.Symbol, kinds []string) ([]symbols.S
 			filtered = append(filtered, s)
 		}
 	}
+	// Turn each symbol into one table row: file, kind, name, start line and signature.
 	rows := make([][]string, len(filtered))
 	for i, s := range filtered {
 		rows[i] = []string{s.File, s.Kind, s.Name, strconv.Itoa(s.StartLine), s.Signature}
@@ -166,6 +176,7 @@ func newSymbolsTab(all []symbols.Symbol, initialRows [][]string) fyne.CanvasObje
 	return container.NewBorder(search, nil, nil, nil, table)
 }
 
+// newAISummariesTab shows the project overview from the LLM pass, or explains why there is none and offers setup or settings.
 func (a *App) newAISummariesTab(res cli.PipelineResult) fyne.CanvasObject {
 	if a.settings.LLMModel == "" || a.settings.LLMBinary == "" {
 		return a.buildSetupAICard()
@@ -259,6 +270,7 @@ func (a *App) newAISummariesTab(res cli.PipelineResult) fyne.CanvasObject {
 	return container.NewVScroll(widget.NewAccordion(items...))
 }
 
+// buildSetupAICard is the first-run card for offline AI: pick a detected local model or download the recommended one, then enable it in settings.
 func (a *App) buildSetupAICard() fyne.CanvasObject {
 	title := widget.NewLabel("Local AI Summaries (Offline)")
 	title.TextStyle = fyne.TextStyle{Bold: true}
@@ -272,6 +284,7 @@ func (a *App) buildSetupAICard() fyne.CanvasObject {
 	progress := widget.NewProgressBar()
 	progress.Hide()
 
+	// Offer any GGUF model files already found on this machine before suggesting a download.
 	localModels := ScanLocalModels()
 	var modelSelect *widget.Select
 	var useModelBtn *widget.Button
@@ -348,6 +361,7 @@ func (a *App) buildSetupAICard() fyne.CanvasObject {
 	return container.NewCenter(container.NewVBox(content...))
 }
 
+// downloadRecommendedModel downloads the recommended GGUF model into the app's model folder on a background goroutine, reporting progress, and calls onDone on success. This is the only part of the GUI that uses the network, and only after the user clicks the download button.
 func (a *App) downloadRecommendedModel(progress *widget.ProgressBar, status *widget.Label, onDone func()) {
 	go func() {
 		home, err := os.UserHomeDir()
@@ -386,6 +400,7 @@ func (a *App) downloadRecommendedModel(progress *widget.ProgressBar, status *wid
 		total := resp.ContentLength
 		var written int64
 
+		// Copy the response in 32 KB chunks so progress can be reported while downloading.
 		buf := make([]byte, 32*1024)
 		for {
 			nr, er := resp.Body.Read(buf)
@@ -428,6 +443,7 @@ func (a *App) downloadRecommendedModel(progress *widget.ProgressBar, status *wid
 	}()
 }
 
+// ensureLlamaCli makes sure a llama-cli path is configured: use the saved one, auto-detect one, or run the bundled download script if it is present.
 func (a *App) ensureLlamaCli(status *widget.Label, onDone func()) {
 	if a.settings.LLMBinary != "" {
 		onDone()
@@ -467,6 +483,7 @@ func (a *App) ensureLlamaCli(status *widget.Label, onDone func()) {
 	}()
 }
 
+// formatBytes renders a byte count with a binary unit suffix, for example 1.5 MB.
 func formatBytes(bytes int64) string {
 	const unit = 1024
 	if bytes < unit {

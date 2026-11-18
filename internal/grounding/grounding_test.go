@@ -1,3 +1,8 @@
+// Program: soft_DNA - grounding_test.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Tests grounding: building a fact context from the database (file-backed and in-memory), error handling for missing tables, limits and sorting, and rendering of all prompt templates.
+
 package grounding
 
 import (
@@ -74,6 +79,7 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...interface{}) {
 
 // ---- Build() integration (file-backed database) ----
 
+// TestBuildSuccess checks that Build reads a real database file and returns the stored facts.
 func TestBuildSuccess(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "codelens.db")
@@ -101,6 +107,7 @@ func TestBuildSuccess(t *testing.T) {
 	}
 }
 
+// TestBuildNoSchema checks that Build returns a descriptive error for a database with no tables.
 func TestBuildNoSchema(t *testing.T) {
 	// Fresh file-backed DB with no tables → tech query fails.
 	dir := t.TempDir()
@@ -117,6 +124,7 @@ func TestBuildNoSchema(t *testing.T) {
 
 // ---- buildFromDB() unit tests (in-memory DBs) ----
 
+// TestBuildFromDBHappyPath checks the root, file count, stack, symbols, entry points and folder roles read from a fully populated in-memory database.
 func TestBuildFromDBHappyPath(t *testing.T) {
 	db := initMemDB(t)
 	defer db.Close()
@@ -212,6 +220,7 @@ func TestBuildFromDBHappyPath(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBEmptyTables checks that empty tables give an empty context and no error.
 func TestBuildFromDBEmptyTables(t *testing.T) {
 	// Schema exists but all tables are empty: should return a zero-value context
 	// without error.
@@ -242,6 +251,7 @@ func TestBuildFromDBEmptyTables(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBNoTechTable checks that a missing tech table produces a tech-query error.
 func TestBuildFromDBNoTechTable(t *testing.T) {
 	// Only meta and files exist — no tech table — should fail on tech query.
 	db := newMemDB(t)
@@ -263,6 +273,7 @@ func TestBuildFromDBNoTechTable(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBNoSymbolsTable checks that a missing symbols table produces a symbols-query error.
 func TestBuildFromDBNoSymbolsTable(t *testing.T) {
 	// meta, files, and tech exist — no symbols table — should fail on symbol query.
 	db := newMemDB(t)
@@ -285,6 +296,7 @@ func TestBuildFromDBNoSymbolsTable(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBNoFilesTableForEntryPoints checks that a missing files table produces an error at the entry-point query.
 func TestBuildFromDBNoFilesTableForEntryPoints(t *testing.T) {
 	// meta, tech, and symbols exist — no files table — should fail on entry point query.
 	// Note: the COUNT query on files uses QueryRow (error ignored), so we need files
@@ -312,6 +324,7 @@ func TestBuildFromDBNoFilesTableForEntryPoints(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBNullSignatureHandled checks that a symbol with a NULL signature is read without error.
 func TestBuildFromDBNullSignatureHandled(t *testing.T) {
 	// Symbols with NULL signature should be handled via COALESCE — no error.
 	db := initMemDB(t)
@@ -333,6 +346,7 @@ func TestBuildFromDBNullSignatureHandled(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBSymbolLimitAt50 checks that at most 50 symbols are returned.
 func TestBuildFromDBSymbolLimitAt50(t *testing.T) {
 	// Insert 60 symbols — query must return at most 50.
 	db := initMemDB(t)
@@ -354,6 +368,7 @@ func TestBuildFromDBSymbolLimitAt50(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBSrcEntryPoints checks that entry points under src (including an uppercase R extension) are matched.
 func TestBuildFromDBSrcEntryPoints(t *testing.T) {
 	// Verify LIKE 'src/main.%' pattern matches src/main.rs, src/main.go, etc.
 	db := initMemDB(t)
@@ -389,6 +404,7 @@ func TestBuildFromDBSrcEntryPoints(t *testing.T) {
 	}
 }
 
+// TestBuildFromDBBinaryFilesExcluded checks that binary files are not counted in the file count.
 func TestBuildFromDBBinaryFilesExcluded(t *testing.T) {
 	// is_binary=1 files must not count toward FileCount.
 	db := initMemDB(t)
@@ -410,6 +426,7 @@ func TestBuildFromDBBinaryFilesExcluded(t *testing.T) {
 
 // ---- folderRole() unit tests ----
 
+// TestFolderRole checks the role text returned for known folder names.
 func TestFolderRole(t *testing.T) {
 	cases := []struct {
 		folder string
@@ -444,6 +461,7 @@ func TestFolderRole(t *testing.T) {
 
 // ---- FormatFileExplainPrompt() tests ----
 
+// TestFormatFileExplainPromptContainsAllZones checks that the file prompt contains its fact, excerpt-free input and output-schema sections and the verified metadata.
 func TestFormatFileExplainPromptContainsAllZones(t *testing.T) {
 	fc := FileContext{
 		File:      "internal/scanner/scanner.go",
@@ -522,6 +540,7 @@ func TestFormatFileExplainPromptContainsAllZones(t *testing.T) {
 	}
 }
 
+// TestFormatFileExplainPromptNoSymbols checks that the file prompt still renders when there are no symbols.
 func TestFormatFileExplainPromptNoSymbols(t *testing.T) {
 	// Zero symbols: prompt still renders without error.
 	fc := FileContext{
@@ -542,6 +561,7 @@ func TestFormatFileExplainPromptNoSymbols(t *testing.T) {
 	}
 }
 
+// TestFormatFileExplainPromptWithExcerpts checks that source excerpts appear inside their start and end delimiters.
 func TestFormatFileExplainPromptWithExcerpts(t *testing.T) {
 	fc := FileContext{
 		File:      "main.go",
@@ -584,6 +604,7 @@ func TestFormatFileExplainPromptWithExcerpts(t *testing.T) {
 	}
 }
 
+// TestFormatFileExplainPromptInjectionDefense checks how the file prompt renders excerpt text that contains delimiter-like characters.
 func TestFormatFileExplainPromptInjectionDefense(t *testing.T) {
 	// We want to verify that stripping of >>> occurs before prompt construction
 	// or in our test, we just confirm that if a mock contains a formatted excerpt,
@@ -620,6 +641,7 @@ func TestFormatFileExplainPromptInjectionDefense(t *testing.T) {
 
 // ---- FormatProjectOverviewPrompt() tests ----
 
+// TestFormatProjectOverviewPromptContainsAllZones checks that the project overview prompt contains all of its sections and the verified facts.
 func TestFormatProjectOverviewPromptContainsAllZones(t *testing.T) {
 	gc := GroundingContext{
 		Root:      "/home/user/project",
@@ -687,6 +709,7 @@ func TestFormatProjectOverviewPromptContainsAllZones(t *testing.T) {
 	}
 }
 
+// TestFormatProjectOverviewPromptIsDeterministic checks that rendering twice gives identical text despite map ordering.
 func TestFormatProjectOverviewPromptIsDeterministic(t *testing.T) {
 	// Running the formatter twice on the same context must produce identical
 	// output regardless of map iteration order (G-5 guardrail).
@@ -714,6 +737,7 @@ func TestFormatProjectOverviewPromptIsDeterministic(t *testing.T) {
 	}
 }
 
+// TestFormatProjectOverviewPromptFoldersSorted checks that folder roles appear in alphabetical order in the prompt.
 func TestFormatProjectOverviewPromptFoldersSorted(t *testing.T) {
 	// FolderRoles must appear in alphabetical order: '.' < 'cmd' < 'internal'.
 	gc := GroundingContext{
@@ -742,6 +766,7 @@ func TestFormatProjectOverviewPromptFoldersSorted(t *testing.T) {
 	}
 }
 
+// TestFormatProjectOverviewPromptEmptyContext checks that an empty context still renders a prompt.
 func TestFormatProjectOverviewPromptEmptyContext(t *testing.T) {
 	// Empty context: prompt still renders without panic or error.
 	gc := GroundingContext{FolderRoles: make(map[string]string)}
@@ -757,6 +782,7 @@ func TestFormatProjectOverviewPromptEmptyContext(t *testing.T) {
 	}
 }
 
+// TestFormatAskPrompt checks that the ask prompt contains the question and the snippet text.
 func TestFormatAskPrompt(t *testing.T) {
 	prompt, err := FormatAskPrompt("where does routing happen?", []AskSnippet{
 		{Path: "src/router.go", Content: "func route() {}\n"},

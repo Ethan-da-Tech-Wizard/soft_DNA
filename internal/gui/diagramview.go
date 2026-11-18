@@ -1,3 +1,8 @@
+// Program: soft_DNA - diagramview.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Draws the folder-structure diagram natively in Fyne, with zoom, fit, folder drill-down, role colours, an Explain Folder action and SVG export.
+
 package gui
 
 import (
@@ -20,12 +25,14 @@ import (
 )
 
 const (
+	// Zoom limits and the amount each zoom click changes the scale.
 	diagramMinScale = float32(0.3)
 	diagramMaxScale = float32(2.5)
 	diagramZoomStep = float32(0.15)
 )
 
 var (
+	// Role colours used for diagram boxes and the legend; the architecture view reuses them.
 	colorRoot    = color.RGBA{R: 59, G: 130, B: 246, A: 255}  // Blue
 	colorSource  = color.RGBA{R: 16, G: 185, B: 129, A: 255}  // Green
 	colorData    = color.RGBA{R: 245, G: 158, B: 11, A: 255}  // Orange/Amber
@@ -38,11 +45,13 @@ var (
 // controls, color role legends, and folder drill-down navigation headers.
 func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint) fyne.CanvasObject {
 	scale := float32(1.0)
+	// currentScope is the folder being viewed (empty for the project root); scale is the zoom factor.
 	currentScope := ""
 
 	view := container.NewStack()
 	navBar := container.NewHBox()
 
+	// rebuild redraws the diagram and the breadcrumb/back controls for the current scope and zoom; it is declared first so the tap callback can call it.
 	var rebuild func()
 	rebuild = func() {
 		view.Objects = []fyne.CanvasObject{newDiagramView(files, stack, folders, entries, scale, currentScope, func(newScope string) {
@@ -60,6 +69,7 @@ func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, st
 
 		backBtn := widget.NewButton("Back", func() {
 			if currentScope != "" {
+				// Go up one level; a parent of "." or "/" means the project root.
 				parent := filepath.ToSlash(filepath.Dir(currentScope))
 				if parent == "." || parent == "/" {
 					parent = ""
@@ -76,6 +86,7 @@ func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, st
 		navBar.Refresh()
 	}
 
+	// Explain Folder asks the shared Answer pipeline about the current folder and shows the reply in a dialog.
 	explainFolderBtn := widget.NewButton("Explain Folder", nil)
 	explainFolderBtn.OnTapped = func() {
 		scope := currentScope
@@ -140,6 +151,7 @@ func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, st
 		scale = 1.0
 		rebuild()
 	})
+	// Fit picks the largest zoom (never above 100%) at which the whole diagram fits in the visible area.
 	fit := widget.NewButton("Fit", func() {
 		viewportSize := view.Size()
 		layout := ComputeDiagramLayoutForScope(files, stack, folders, entries, currentScope)
@@ -160,6 +172,7 @@ func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, st
 		}
 	})
 
+	// Export SVG writes the current view to architecture.svg inside the output folder.
 	exportBtn := widget.NewButton("Export SVG", func() {
 		layout := ComputeDiagramLayoutForScope(files, stack, folders, entries, currentScope)
 		svgPath := filepath.Join(res.OutDir, "architecture.svg")
@@ -187,6 +200,7 @@ func (a *App) newDiagramTab(res cli.PipelineResult, files []scanner.FileInfo, st
 	return container.NewBorder(top, nil, nil, nil, view)
 }
 
+// legendItem builds one legend entry: a small colour swatch followed by its text.
 func legendItem(col color.Color, text string) fyne.CanvasObject {
 	rect := canvas.NewRectangle(col)
 	rect.SetMinSize(fyne.NewSize(12, 12))
@@ -198,6 +212,7 @@ func legendItem(col color.Color, text string) fyne.CanvasObject {
 func newDiagramView(files []scanner.FileInfo, stack stackdetect.Report, folders []structure.Folder, entries []structure.EntryPoint, scale float32, scope string, onScopeChanged func(string)) fyne.CanvasObject {
 	layout := ComputeDiagramLayoutForScope(files, stack, folders, entries, scope)
 
+	// Index nodes by ID so edges can look up their endpoints.
 	byID := make(map[string]DiagramNode, len(layout.Nodes))
 	for _, n := range layout.Nodes {
 		byID[n.ID] = n
@@ -211,6 +226,7 @@ func newDiagramView(files []scanner.FileInfo, stack stackdetect.Report, folders 
 		if !ok1 || !ok2 {
 			continue
 		}
+		// Edges run from the bottom centre of the parent box to the top centre of the child box.
 		line := canvas.NewLine(theme.Color(theme.ColorNameSeparator))
 		line.Position1 = fyne.NewPos((from.X+from.W/2)*scale, (from.Y+from.H)*scale)
 		line.Position2 = fyne.NewPos((to.X+to.W/2)*scale, to.Y*scale)
@@ -223,6 +239,7 @@ func newDiagramView(files []scanner.FileInfo, stack stackdetect.Report, folders 
 		bgColor := roleColor(n.ID)
 
 		var onTap func()
+		// Only folder boxes are clickable; tapping one drills into that folder.
 		if strings.HasPrefix(n.ID, "folder_") {
 			targetScope := strings.TrimPrefix(n.ID, "folder_")
 			onTap = func() {
@@ -242,6 +259,7 @@ func newDiagramView(files []scanner.FileInfo, stack stackdetect.Report, folders 
 	return container.NewScroll(canvasArea)
 }
 
+// roleColor picks a box colour from a node ID: folders are coloured by their detected role, other node kinds have fixed colours.
 func roleColor(nodeID string) color.Color {
 	if nodeID == "root" || nodeID == "stack" {
 		return colorRoot
@@ -289,12 +307,14 @@ type DiagramNodeWidget struct {
 	onTap   func()
 }
 
+// NewDiagramNodeWidget creates a diagram box with the given colour, zoom and optional tap handler.
 func NewDiagramNodeWidget(n DiagramNode, bgColor color.Color, scale float32, onTap func()) *DiagramNodeWidget {
 	w := &DiagramNodeWidget{node: n, bgColor: bgColor, scale: scale, onTap: onTap}
 	w.ExtendBaseWidget(w)
 	return w
 }
 
+// CreateRenderer builds the filled rectangle and centred text label that draw the box.
 func (w *DiagramNodeWidget) CreateRenderer() fyne.WidgetRenderer {
 	box := canvas.NewRectangle(w.bgColor)
 	box.StrokeColor = theme.Color(theme.ColorNamePrimary)
@@ -311,34 +331,41 @@ func (w *DiagramNodeWidget) CreateRenderer() fyne.WidgetRenderer {
 	}
 }
 
+// Tapped runs the tap handler, if one was provided (folder boxes only).
 func (w *DiagramNodeWidget) Tapped(ev *fyne.PointEvent) {
 	if w.onTap != nil {
 		w.onTap()
 	}
 }
 
+// diagramNodeRenderer lays out and draws a DiagramNodeWidget's rectangle and label.
 type diagramNodeRenderer struct {
 	widget *DiagramNodeWidget
 	box    *canvas.Rectangle
 	label  *canvas.Text
 }
 
+// Destroy has nothing to release because the canvas objects are garbage collected.
 func (r *diagramNodeRenderer) Destroy() {}
 
+// Layout stretches the rectangle over the widget and centres the label vertically inside it.
 func (r *diagramNodeRenderer) Layout(size fyne.Size) {
 	r.box.Resize(size)
 	r.label.Resize(fyne.NewSize(size.Width-8, size.Height))
 	r.label.Move(fyne.NewPos(4, size.Height/2-8*r.widget.scale))
 }
 
+// MinSize is the node's layout size multiplied by the current zoom.
 func (r *diagramNodeRenderer) MinSize() fyne.Size {
 	return fyne.NewSize(r.widget.node.W*r.widget.scale, r.widget.node.H*r.widget.scale)
 }
 
+// Objects returns the canvas objects to draw, in paint order.
 func (r *diagramNodeRenderer) Objects() []fyne.CanvasObject {
 	return []fyne.CanvasObject{r.box, r.label}
 }
 
+// Refresh re-applies colour, text and font size and redraws both parts.
 func (r *diagramNodeRenderer) Refresh() {
 	r.box.FillColor = r.widget.bgColor
 	r.label.Text = r.widget.node.Label

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Program: soft_DNA - download_llama.sh
+# Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+# Last Modified: 2026-11-18
+# Purpose: Detects the operating system and CPU, downloads a pre-built llama-cli release from GitHub, extracts it, and installs the binary and its shared libraries into the local bin folder.
 # download_llama.sh — Download and install a pre-built llama-cli binary for CodeLens Local.
 #
 # Usage:

@@ -1,3 +1,8 @@
+// Program: soft_DNA - validate.go
+// Programmer: Ethan-da-Tech-Wizard (written with Claude, an AI assistant)
+// Last Modified: 2026-11-18
+// Purpose: Parses and sanitises the JSON the local model returns (file summaries, project overview, ask answers): drops unverified symbol names, strips paths, URLs and code spans, and caps text length.
+
 // Package validate parses and sanitizes raw JSON output from the LLM runner
 // before it reaches the report writer. It enforces three constraints:
 //
@@ -44,11 +49,13 @@ type ValidationError struct {
 	Reason string // human-readable description of the violation
 }
 
+// Error formats the violation as "validate: field: reason", so ValidationError satisfies the error interface.
 func (e ValidationError) Error() string {
 	return fmt.Sprintf("validate: %s: %s", e.Field, e.Reason)
 }
 
 const (
+	// Length caps (in characters) for prose fields, and the marker appended when text is cut.
 	maxFileSummaryLen        = 500
 	maxProjectDescriptionLen = 1000
 	ellipsis                 = "…" // U+2026, appended when text is truncated
@@ -103,6 +110,7 @@ func ValidateFileExplanation(raw []byte, allowedSymbols []string) (FileExplanati
 	var fe FileExplanation
 	var errs []ValidationError
 
+	// Drop any trailing text after the last closing brace, since models sometimes add extra output after the JSON object.
 	lastCurly := bytes.LastIndexByte(raw, '}')
 	if lastCurly != -1 {
 		raw = raw[:lastCurly+1]
@@ -155,6 +163,7 @@ type AskAnswer struct {
 	Answer string `json:"answer"`
 }
 
+// maxAskAnswerLen is the character cap for a grounded ask answer.
 const maxAskAnswerLen = 1500
 
 // ValidateAskAnswer parses raw LLM JSON output for a grounded --ask call and
@@ -163,6 +172,7 @@ const maxAskAnswerLen = 1500
 // structurally invalid.
 func ValidateAskAnswer(raw []byte) (AskAnswer, error) {
 	var aa AskAnswer
+	// Drop any trailing text after the last closing brace, as above.
 	lastCurly := bytes.LastIndexByte(raw, '}')
 	if lastCurly != -1 {
 		raw = raw[:lastCurly+1]
@@ -183,6 +193,7 @@ func ValidateAskAnswer(raw []byte) (AskAnswer, error) {
 // A hard error is returned only when the JSON is structurally invalid.
 func ValidateProjectExplanation(raw []byte) (ProjectExplanation, error) {
 	var pe ProjectExplanation
+	// Drop any trailing text after the last closing brace, as above.
 	lastCurly := bytes.LastIndexByte(raw, '}')
 	if lastCurly != -1 {
 		raw = raw[:lastCurly+1]
