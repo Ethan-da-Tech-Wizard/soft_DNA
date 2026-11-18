@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: diagramlayout_test.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Renders interactive software diagrams, computing spatial grid layouts, node placement coordinates, and exporting visual diagrams to SVG, PNG, and Mermaid markdown.
+// ==============================================================================
+
 package gui
 
 import (

@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: scanner.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Provides high-performance recursive directory traversal, ignoring binary artifacts and vendor directories, determining programming languages by extension/shebang, and computing deterministic cryptographic SHA-256 hashes.
+// ==============================================================================
+
 // Package scanner inventories source files without executing target code.
 package scanner
 

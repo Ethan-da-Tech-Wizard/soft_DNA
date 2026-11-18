@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# ==============================================================================
+# Program: download_model.sh
+# Programmer: Ethan-da-Tech-Wizard
+# Last Modified: November 18, 2026
+# Purpose: Downloads recommended GGUF quantized language model weights from HuggingFace, verifying download completeness and configuring default local model paths.
+# ==============================================================================
+
 # download_model.sh — Download a quantized GGUF model for CodeLens Local.
 #
 # Usage:

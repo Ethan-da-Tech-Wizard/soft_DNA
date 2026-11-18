@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: diagnostics.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Profiles system resources, CPU thread allocation, RAM availability, and local inference backend health to provide performance diagnostics and tuning recommendations.
+// ==============================================================================
+
 // Boundary-safe summarization loop (BRSL) diagnostics.
 //
 // LoopState implements the state vector S = (Σ, p, ρ) and update rules from

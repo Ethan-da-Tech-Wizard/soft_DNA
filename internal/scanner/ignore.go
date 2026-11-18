@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: ignore.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Parses and evaluates .gitignore files and custom ignore rules, supporting glob wildcards, leading slashes, directory exclusions, and default toolcache/build folder skips.
+// ==============================================================================
+
 package scanner
 
 import (

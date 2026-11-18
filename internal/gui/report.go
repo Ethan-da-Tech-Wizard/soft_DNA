@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: report.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Generates comprehensive markdown and HTML architectural summary reports, synthesizing project metrics, symbol tables, dependency matrices, and Mermaid diagrams.
+// ==============================================================================
+
 package gui
 
 import (

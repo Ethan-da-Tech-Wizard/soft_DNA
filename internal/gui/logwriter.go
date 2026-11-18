@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: logwriter.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Implements a thread-safe io.Writer pipe connecting CLI and engine logging streams directly into the GUI console text view.
+// ==============================================================================
+
 package gui
 
 import "bytes"

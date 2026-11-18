@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: diagram.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Generates structured architectural diagrams in Mermaid, Graphviz DOT, and ASCII formats representing package relationships, component dependencies, and data flow topologies.
+// ==============================================================================
+
 // Package diagram writes a simple Mermaid architecture diagram.
 package diagram
 

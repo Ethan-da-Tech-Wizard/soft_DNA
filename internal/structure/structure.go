@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: structure.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Constructs hierarchical package and directory trees from scanned file inventories, computing depth metrics, folder summaries, and structural topology for architectural visualization.
+// ==============================================================================
+
 // Package structure derives simple folder roles and entry points.
 package structure
 

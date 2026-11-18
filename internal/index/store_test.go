@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: store_test.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Automated test suite verifying functional correctness, boundary conditions, edge cases, and deterministic outputs.
+// ==============================================================================
+
 package index
 
 import (

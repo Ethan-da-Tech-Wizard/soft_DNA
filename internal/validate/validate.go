@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: validate.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Performs schema and semantic consistency checks on codebase scan models, ensuring integrity across symbol references, file mappings, and architectural node graphs.
+// ==============================================================================
+
 // Package validate parses and sanitizes raw JSON output from the LLM runner
 // before it reaches the report writer. It enforces three constraints:
 //

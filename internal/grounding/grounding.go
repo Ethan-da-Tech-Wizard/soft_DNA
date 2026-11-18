@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: grounding.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Constructs grounded context windows for local LLM inference, assembling repository maps, symbol inventories, and architectural highlights into structured prompt templates.
+// ==============================================================================
+
 // Package grounding compiles verified facts from codelens.db into structured
 // prompting contexts for the M6 hybrid LLM summarization pass.
 // All data flows strictly from SQLite into the context; the LLM may only

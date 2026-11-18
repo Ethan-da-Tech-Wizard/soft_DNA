@@ -1,3 +1,10 @@
+// ==============================================================================
+// Program: cli.go
+// Programmer: Ethan-da-Tech-Wizard
+// Last Modified: November 18, 2026
+// Purpose: Implements command-line argument parsing, flag handling, help documentation, and subcommand execution orchestrating codebase scanning, symbol extraction, diagram generation, and LLM grounding.
+// ==============================================================================
+
 // Package cli implements the minimal CodeLens command-line interface.
 package cli
 
