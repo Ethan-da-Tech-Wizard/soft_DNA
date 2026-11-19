@@ -8,6 +8,16 @@
 // Package stackdetect infers a project stack from manifest files.
 package stackdetect
 
+// File role: answers "what is this project built with?" from manifest files only (go.mod, Cargo.toml,
+// package.json, ...), never from file contents or by running anything. Called by cli.RunPipeline; the result
+// feeds the report's tech-stack table and summary line, the Mermaid diagram, and the setup-command guess in cli.setupCommands.
+//
+// Design decision: evidence-based. Every Tech entry names the manifest that proves it (EvidenceFile), so a
+// reader can verify each claim. Source files with no manifest do not produce a Tech entry (a lone .py file is
+// not enough to claim "Python"), which keeps false positives out.
+//
+// Known limits: only the project root is examined (nested manifests in sub-folders are ignored, except the
+// migrations/ folder check); versions are not reported. Tests: stackdetect_test.go.
 import (
 	"encoding/json"
 	"os"
@@ -19,6 +29,7 @@ import (
 )
 
 // Tech is one detected technology with evidence.
+// Category is one of: language, tool, runtime, framework, database. Name is a display name ("Node.js", "pnpm").
 type Tech struct {
 	Name         string
 	Category     string
@@ -26,26 +37,32 @@ type Tech struct {
 }
 
 // Report summarizes detected technologies.
+// Summary is the names joined with " + " (for example "Go + Make"); Tech is sorted so the report is reproducible.
 type Report struct {
 	Summary string
 	Tech    []Tech
 }
 
 // Detect returns manifest-based stack evidence.
+// Checks a fixed list of well-known file names at the root of the scanned tree. Complexity: O(files) to build the lookup map plus constant work per rule.
 func Detect(files []scanner.FileInfo, root string) Report {
 	// Deduplicate detected frameworks across manifest paths using canonical name keys
+	// Keyed by category:name:evidence so the same fact found twice collapses to one entry, while the same technology proven by two different manifests (Python via requirements.txt and pyproject.toml) is kept twice.
 	seen := make(map[string]Tech)
 	// Index files into hash table for O(1) existence lookups by relative path
+	// Paths are relative to the root with forward slashes, so a lookup like paths["go.mod"] means "go.mod in the project root".
 	paths := make(map[string]scanner.FileInfo, len(files))
 	for _, file := range files {
 		paths[file.Path] = file
 	}
 
+	// Passed down to detectPackageJSON, so the manifest-specific code reports through the same de-duplication.
 	add := func(name, category, evidence string) {
 		key := category + ":" + name + ":" + evidence
 		seen[key] = Tech{Name: name, Category: category, EvidenceFile: evidence}
 	}
 
+	// A Makefile alone does not prove C (it could build anything); C is claimed only when the scanner also saw at least one .c file.
 	hasC := false
 	for _, file := range files {
 		if file.Language == "C" {
@@ -54,6 +71,7 @@ func Detect(files []scanner.FileInfo, root string) Report {
 		}
 	}
 
+	// Rules below: one `if` per manifest. Each adds the language and/or tool it implies. Order does not matter because the result is sorted at the end.
 	if _, ok := paths["go.mod"]; ok {
 		add("Go", "language", "go.mod")
 	}
@@ -89,6 +107,8 @@ func Detect(files []scanner.FileInfo, root string) Report {
 	if _, ok := paths["schema.sql"]; ok {
 		add("SQL", "database", "schema.sql")
 	}
+
+	// Any file under migrations/ is taken as evidence of a SQL database; one match is enough, so the loop stops at the first.
 	for p := range paths {
 		if strings.HasPrefix(p, "migrations/") {
 			add("SQL", "database", p)
@@ -121,6 +141,8 @@ func Detect(files []scanner.FileInfo, root string) Report {
 		add("C++", "language", "CMakeLists.txt")
 		add("CMake", "tool", "CMakeLists.txt")
 	}
+
+	// package.json implies the Node.js runtime; its dependency lists are then read for frameworks.
 	if _, ok := paths["package.json"]; ok {
 		add("Node.js", "runtime", "package.json")
 		detectPackageJSON(root, add)
@@ -135,6 +157,7 @@ func Detect(files []scanner.FileInfo, root string) Report {
 		add("Bun", "runtime", "bun.lockb")
 	}
 
+	// Map iteration order is random in Go, so entries are copied out and sorted by (category, name, evidence file) for stable output.
 	tech := make([]Tech, 0, len(seen))
 	for _, item := range seen {
 		tech = append(tech, item)
@@ -155,12 +178,14 @@ func Detect(files []scanner.FileInfo, root string) Report {
 	}
 }
 
+// Reads the root package.json and reports React, Next.js, Vite and TypeScript when listed as dependencies. A missing or malformed file is silently ignored (the Node.js entry is already recorded by the caller).
 func detectPackageJSON(root string, add func(string, string, string)) {
 	data, err := os.ReadFile(filepath.Join(root, "package.json"))
 	if err != nil {
 		return
 	}
 
+	// Only the two dependency maps are decoded; every other JSON field is ignored by encoding/json.
 	var manifest struct {
 		Dependencies    map[string]string `json:"dependencies"`
 		DevDependencies map[string]string `json:"devDependencies"`
@@ -169,6 +194,7 @@ func detectPackageJSON(root string, add func(string, string, string)) {
 		return
 	}
 
+	// dependencies and devDependencies are merged because a framework counts regardless of which list names it.
 	deps := make(map[string]string)
 	for name, version := range manifest.Dependencies {
 		deps[name] = version
@@ -191,6 +217,7 @@ func detectPackageJSON(root string, add func(string, string, string)) {
 	}
 }
 
+// Unique technology names, sorted alphabetically and joined with " + ". Sorted by name (not by category) so the line reads the same however many manifests prove a technology.
 func summary(tech []Tech) string {
 	if len(tech) == 0 {
 		return "No stack manifest detected"
