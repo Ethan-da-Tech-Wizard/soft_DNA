@@ -69,6 +69,7 @@ type Options struct {
 
 // Scan walks root and returns a deterministic file inventory.
 func Scan(root string, opts Options) ([]FileInfo, error) {
+	// Guard against uninitialized or negative upper file size bounds by establishing standard 2MB limit
 	if opts.MaxFileSize <= 0 {
 		opts.MaxFileSize = defaultMaxFileSize
 	}
@@ -88,7 +89,9 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 	ignore := newIgnoreMatcher(absRoot, opts.Ignore)
 	var files []FileInfo
 
+	// Execute depth-first traversal of filesystem tree, pruning ignored directory subtrees eagerly
 	err = filepath.WalkDir(absRoot, func(path string, entry fs.DirEntry, walkErr error) error {
+		// Handle permission errors or broken symlinks defensively without terminating traversal
 		if walkErr != nil {
 			files = append(files, skippedInfo(absRoot, path, "read_error"))
 			if entry != nil && entry.IsDir() {

@@ -33,7 +33,9 @@ type Report struct {
 
 // Detect returns manifest-based stack evidence.
 func Detect(files []scanner.FileInfo, root string) Report {
+	// Deduplicate detected frameworks across manifest paths using canonical name keys
 	seen := make(map[string]Tech)
+	// Index files into hash table for O(1) existence lookups by relative path
 	paths := make(map[string]scanner.FileInfo, len(files))
 	for _, file := range files {
 		paths[file.Path] = file
