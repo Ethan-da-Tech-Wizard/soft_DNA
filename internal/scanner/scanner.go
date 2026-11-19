@@ -8,6 +8,17 @@
 // Package scanner inventories source files without executing target code.
 package scanner
 
+// File role: the first stage of the pipeline. `Scan` walks the project and returns one `FileInfo` per file with
+// its language, size, line count and SHA-256 content hash. Every later stage (stack detection, symbols, index,
+// report) works from this list, and the hash is what makes incremental re-runs possible (see internal/cli).
+//
+// Safety rules enforced here: nothing is executed; files over the size limit are not read; binary files are
+// detected and skipped; symlinks are followed only when they stay inside the root; unreadable entries become
+// "skipped" rows (with a reason) instead of aborting the scan.
+//
+// Determinism: the walk order is filesystem dependent, so the result is sorted by path before returning.
+// Ignore patterns live in ignore.go; this file only decides what to do with a path that was not ignored.
+// Tests: scanner_test.go.
 import (
 	"bytes"
 	"crypto/sha256"
@@ -20,8 +31,12 @@ import (
 	"strings"
 )
 
+// 2 MiB: large enough for hand-written source files, small enough to skip generated bundles and data dumps.
 const defaultMaxFileSize int64 = 2 * 1024 * 1024
 
+// Directories that never hold hand-written project source: VCS metadata, caches, virtualenvs, build output
+// and dependency folders. They are pruned without being entered, which is the main reason scans of big
+// repositories stay fast. Keys are directory base names, so a folder called "build" is skipped at any depth.
 var defaultIgnoredDirs = map[string]struct{}{
 	".cache":        {},
 	".claude":       {},
@@ -49,6 +64,9 @@ var defaultIgnoredDirs = map[string]struct{}{
 }
 
 // FileInfo describes one inventoried path.
+// One row of the inventory. Path is relative to the scan root and always uses forward slashes. ContentHash is the
+// hex SHA-256 of the file bytes (empty for skipped files). Skipped files keep their path and reason so the
+// report can list what was not analysed: SkipReason is one of max_file_size, read_error, binary, symlink_unresolved, symlink_escape, symlink_directory.
 type FileInfo struct {
 	Path        string
 	Ext         string
@@ -62,18 +80,22 @@ type FileInfo struct {
 }
 
 // Options controls scanner behavior.
+// Ignore holds extra patterns from the user (`--ignore`), applied on top of defaultIgnoredDirs; syntax is described in ignore.go.
 type Options struct {
 	MaxFileSize int64
 	Ignore      []string
 }
 
 // Scan walks root and returns a deterministic file inventory.
+// Errors: the root cannot be resolved, does not exist, or is not a directory. Problems with individual files are
+// recorded in the result, never returned. Complexity: O(files) plus reading every file that passes the checks.
 func Scan(root string, opts Options) ([]FileInfo, error) {
 	// Guard against uninitialized or negative upper file size bounds by establishing standard 2MB limit
 	if opts.MaxFileSize <= 0 {
 		opts.MaxFileSize = defaultMaxFileSize
 	}
 
+	// An absolute root makes filepath.Rel behave predictably, and lets the symlink check compare paths reliably.
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -86,6 +108,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 		return nil, errors.New("root is not a directory")
 	}
 
+	// Built once per scan; the matcher is consulted for every directory and file.
 	ignore := newIgnoreMatcher(absRoot, opts.Ignore)
 	var files []FileInfo
 
@@ -100,18 +123,22 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 			return nil
 		}
 
+		// The root itself is visited first by WalkDir; it is neither a file to record nor a directory to test against ignore rules.
 		if path == absRoot {
 			return nil
 		}
 
+		// Matching and reporting both use the root-relative slash path, so rules behave the same on Windows and Unix.
 		rel := cleanRel(absRoot, path)
 		if entry.IsDir() {
+			// SkipDir prunes the whole subtree, so ignored directories cost nothing.
 			if shouldSkipDir(rel, entry.Name(), ignore) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 
+		// Ignored files are omitted completely (not listed as skipped), unlike files skipped for size or binary content.
 		if ignore.match(rel, entry.Name(), false) {
 			return nil
 		}
@@ -122,6 +149,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 			return nil
 		}
 
+		// DirEntry.Info does not follow symlinks, so this identifies links and routes them to the stricter symlink checks.
 		if info.Mode()&os.ModeSymlink != 0 {
 			files = append(files, scanSymlink(absRoot, path, rel, opts.MaxFileSize))
 			return nil
@@ -134,6 +162,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 		return nil, err
 	}
 
+	// Sorting by path makes the inventory (and everything derived from it) identical across runs and machines.
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Path < files[j].Path
 	})
@@ -141,6 +170,7 @@ func Scan(root string, opts Options) ([]FileInfo, error) {
 	return files, nil
 }
 
+// Built-in ignore list first (cheap map lookup), then the user's patterns.
 func shouldSkipDir(rel, name string, ignore ignoreMatcher) bool {
 	if _, ok := defaultIgnoredDirs[name]; ok {
 		return true
@@ -148,8 +178,11 @@ func shouldSkipDir(rel, name string, ignore ignoreMatcher) bool {
 	return ignore.match(rel, name, true)
 }
 
+// Order of checks is deliberate and cheapest-first: size from metadata (no read), then read, then binary check,
+// then hash and line count. Parameter absRoot is unused here but kept so the signature matches scanSymlink.
 func scanRegularFile(absRoot, path, rel string, info fs.FileInfo, maxFileSize int64) FileInfo {
 	file := baseInfo(rel, info.Size())
+	// Reported size comes from file metadata, so oversized files are skipped without ever being read into memory.
 	if info.Size() > maxFileSize {
 		file.Skipped = true
 		file.SkipReason = "max_file_size"
@@ -163,6 +196,7 @@ func scanRegularFile(absRoot, path, rel string, info fs.FileInfo, maxFileSize in
 		return file
 	}
 
+	// Binary files are recorded (so they show up in the inventory) but not hashed or counted.
 	if isBinary(data) {
 		file.IsBinary = true
 		file.Skipped = true
@@ -170,12 +204,15 @@ func scanRegularFile(absRoot, path, rel string, info fs.FileInfo, maxFileSize in
 		return file
 	}
 
+	// SHA-256 gives a stable identity for "did this file change since the last run" without storing file contents.
 	sum := sha256.Sum256(data)
 	file.ContentHash = hex.EncodeToString(sum[:])
 	file.LineCount = lineCount(data)
 	return file
 }
 
+// A symlink is accepted only if it resolves to a regular file inside the project root. Links that leave the
+// root are reported as "symlink_escape" and never read, so a link to /etc/passwd cannot pull outside data into the index.
 func scanSymlink(absRoot, path, rel string, maxFileSize int64) FileInfo {
 	file := baseInfo(rel, 0)
 	target, err := filepath.EvalSymlinks(path)
@@ -184,6 +221,8 @@ func scanSymlink(absRoot, path, rel string, maxFileSize int64) FileInfo {
 		file.SkipReason = "symlink_unresolved"
 		return file
 	}
+
+	// The escape check uses the resolved target, so chains of links and `..` tricks are covered.
 	if !isInside(absRoot, target) {
 		file.Skipped = true
 		file.SkipReason = "symlink_escape"
@@ -204,6 +243,7 @@ func scanSymlink(absRoot, path, rel string, maxFileSize int64) FileInfo {
 	return scanRegularFile(absRoot, target, rel, info, maxFileSize)
 }
 
+// Creates a placeholder row for paths that could not even be examined (walk error or Info failure).
 func skippedInfo(absRoot, path, reason string) FileInfo {
 	file := baseInfo(cleanRel(absRoot, path), 0)
 	file.Skipped = true
@@ -211,6 +251,7 @@ func skippedInfo(absRoot, path, reason string) FileInfo {
 	return file
 }
 
+// Fills the fields known from the path alone: extension (lower-cased) and language guess. Content-derived fields are set later.
 func baseInfo(rel string, size int64) FileInfo {
 	ext := strings.ToLower(filepath.Ext(rel))
 	return FileInfo{
@@ -221,6 +262,7 @@ func baseInfo(rel string, size int64) FileInfo {
 	}
 }
 
+// Falls back to the cleaned absolute path if Rel fails (different volumes on Windows); the slash form keeps output portable.
 func cleanRel(absRoot, path string) string {
 	rel, err := filepath.Rel(absRoot, path)
 	if err != nil {
@@ -229,6 +271,7 @@ func cleanRel(absRoot, path string) string {
 	return filepath.ToSlash(rel)
 }
 
+// True for the root itself or any descendant. The ".." test includes the separator so a path that merely starts with two dots, or a sibling directory, is judged by its real relative form.
 func isInside(absRoot, target string) bool {
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
@@ -241,6 +284,7 @@ func isInside(absRoot, target string) bool {
 	return rel == "." || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
 }
 
+// Same heuristic as git and grep: a NUL byte in the first 8000 bytes means binary. Text encodings such as UTF-16 contain NULs and are therefore skipped.
 func isBinary(data []byte) bool {
 	sample := data
 	if len(sample) > 8000 {
@@ -249,6 +293,7 @@ func isBinary(data []byte) bool {
 	return bytes.IndexByte(sample, 0) >= 0
 }
 
+// Counts newline characters, plus one for a final line without a trailing newline; an empty file has zero lines.
 func lineCount(data []byte) int {
 	if len(data) == 0 {
 		return 0
@@ -260,6 +305,7 @@ func lineCount(data []byte) int {
 	return lines
 }
 
+// Maps lower-cased file extension to the language name used everywhere else (symbols.Extract switches on these exact strings). Files with no recognised extension are matched by base name (Dockerfile, Makefile, CMakeLists.txt) and otherwise reported as "Unknown". Despite the file header's mention of shebangs, there is no shebang detection here.
 func detectLanguage(ext, base string) string {
 	switch ext {
 	case ".go":
